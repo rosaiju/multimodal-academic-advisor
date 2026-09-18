@@ -1,0 +1,415 @@
+# Morgan State University - B.S. Computer Science - 2026-2028 Undergraduate Catalog
+#
+# Morgan publishes BIENNIAL catalogs. There is no 2026-2027 edition; 2026-2028 is
+# the correct one for students entering Fall 2026.
+#
+# PROVENANCE
+#   Course rows (code, title, credits, prerequisites, offering) are transcribed
+#   mechanically from the official catalog via preview_degree_planner.php
+#   (catoid=28, poid=6521) and preview_course_nopop.php. Nothing here is inferred.
+#
+# STATUS: COURSE LAYER COMPLETE - REQUIREMENT BLOCKS PROVISIONAL
+#   All 37 COSC courses and the full COSC prerequisite graph are encoded and verified.
+#   The requirement_blocks below are deliberately INCOMPLETE. Six unresolved
+#   contradictions in the official sources make the group structure and credit
+#   totals unsafe to encode; see docs/catalog-open-questions.md. Blocks are added
+#   only as each question is answered by the department. Do not fill them in from
+#   a secondary source - CS Navigator's public API is known to serve stale data.
+#
+# *** This file is DATA, not advice. The LLM never reads it to compute progress;
+#     the audit engine does. See tests/test_no_llm_in_engine.py. ***
+
+program_id: morgan_cosc_bs_2026_2028
+program: BS Computer Science
+institution: Morgan State University
+catalog_year: "2026-2028"
+
+# 120 is the university-wide baccalaureate minimum and is NOT one of the disputed
+# figures. The disputed numbers (major 59 vs 65, gen ed 40 vs 44) are not encoded.
+total_credits_required: 120
+min_gpa: 2.0
+min_major_gpa: 2.0
+major_subjects: [COSC]
+
+courses:
+  # ---------------------------------------------------------------------------
+  # MATH prerequisite stubs - UNVERIFIED PLACEHOLDERS
+  #
+  # Four COSC courses name MATH prerequisites, but the harvest covered subjects
+  # CHEM..MMJN only, so no MATH record exists yet. These stubs exist SOLELY to keep
+  # the prerequisite graph honest and satisfy referential integrity.
+  #
+  # credits: 0 is deliberate. A guessed credit value would flow into audit totals
+  # and produce a plausible-but-wrong answer; zero fails loudly instead. Replace
+  # all three from the real MATH harvest before any credit total is trusted.
+  # ---------------------------------------------------------------------------
+  - code: MATH141
+    title: "UNVERIFIED PLACEHOLDER - pending MATH harvest"
+    credits: 0
+
+  - code: MATH241
+    title: "UNVERIFIED PLACEHOLDER - pending MATH harvest"
+    credits: 0
+
+  - code: MATH242
+    title: "UNVERIFIED PLACEHOLDER - pending MATH harvest"
+    credits: 0
+
+  # ---------------------------------------------------------------------------
+  # COSC - all 37 courses, generated from the harvest (see PROVENANCE above)
+  # ---------------------------------------------------------------------------
+  - code: COSC110
+    title: "Introduction to Computing"
+    credits: 3
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC111
+    title: "Introduction to Computer Science I"
+    credits: 4
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC112
+    title: "Introduction to Computer Science II"
+    credits: 4
+    prerequisites: [COSC111]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC150
+    title: "Computational Science and Data Analysis"
+    credits: 3
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC220
+    title: "Data Structures and Algorithms"
+    credits: 4
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC237
+    title: "Advanced Programming I"
+    credits: 4
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC238
+    title: "Object Oriented Programming"
+    credits: 4
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC239
+    title: "Java Programming"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC241
+    title: "Computer Systems and Digital Logic"
+    credits: 3
+    prerequisites: [COSC112, MATH141]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+    # NON-COURSE GATE: or Departmental permission
+
+  - code: COSC243
+    title: "Computer Organization and Architecture"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC247
+    title: "Digital Logic"
+    credits: 3
+    prerequisites: [COSC243]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC251
+    title: "Introduction to Data Science"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC281
+    title: "Discrete Structure"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    # catalog offering string: FALL/SPRING
+
+  - code: COSC332
+    title: "Introduction to Game Design and Development"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC343
+    title: "Microprocessor Systems and Applications"
+    credits: 3
+    prerequisites: [COSC243]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC345
+    title: "Introduction to High Performance Computing"
+    credits: 3
+    prerequisites: [COSC112, MATH241]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC349
+    title: "Computer Networks"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC350
+    title: "Foundations of Computer Security and Information Assurance"
+    credits: 3
+    prerequisites: [COSC241]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC351
+    title: "Cybersecurity"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: FALL OR SPRING
+
+  - code: COSC352
+    title: "Organization of Programming Languages"
+    credits: 3
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: FALL OR SPRING
+
+  - code: COSC354
+    title: "Operating Systems"
+    credits: 3
+    prerequisites: [COSC220, COSC241]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: FALL OR SPRING
+
+  - code: COSC358
+    title: "Network Security Fundamentals"
+    credits: 3
+    prerequisites: [COSC349]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC373
+    title: "Foundations of Bioinformatics"
+    credits: 4
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC374
+    title: "Introduction to Bioprogramming"
+    credits: 3
+    prerequisites: [COSC373]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC383
+    title: "Numerical Methods and Programming"
+    credits: 3
+    prerequisites: [MATH242]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC385
+    title: "Theory of Languages and Automata"
+    credits: 3
+    prerequisites: [COSC220, COSC281]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC413
+    title: "Parallel Algorithms"
+    credits: 3
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC456
+    title: "Compilers"
+    credits: 3
+    prerequisites: [COSC385]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC458
+    title: "Software Engineering"
+    credits: 3
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: FALL OR SPRING
+
+  - code: COSC460
+    title: "Computer Graphics"
+    credits: 3
+    prerequisites: [COSC220, MATH241]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC462
+    title: "Introduction to Database Security"
+    credits: 3
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+    # NON-COURSE GATE: catalog lists COSC 459, which does not exist - prerequisite DROPPED
+
+  - code: COSC470
+    title: "Artificial Intelligence"
+    credits: 3
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: FALL OR SPRING
+
+  - code: COSC471
+    title: "Expert Systems"
+    credits: 3
+    prerequisites: [COSC470]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC490
+    title: "Senior Project"
+    credits: 3
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+    # NON-COURSE GATE: Department Chair permission and senior standing
+
+  - code: COSC491
+    title: "Special Topics in Computer Science"
+    credits: 3
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+
+  - code: COSC498
+    title: "Senior Internship"
+    credits: 3
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+    # NON-COURSE GATE: 3.0 GPA, senior standing, Department Chair permission
+
+  - code: COSC499
+    title: "Senior Research or Teaching/Tutorial Assistantship"
+    credits: 3
+    terms_offered: [fall, spring]
+    offered_as_needed: true
+    # catalog offering string: AS NEEDED
+    # NON-COURSE GATE: 3.0 GPA, senior standing, Department Chair permission
+requirement_blocks:
+  # Only requirements that NO official source contradicts are encoded here.
+  # Everything disputed lives in docs/catalog-open-questions.md until answered.
+
+  - id: cs_core_lower
+    name: Computer Science Core (Lower Division)
+    type: all_of
+    courses: [COSC111, COSC112, COSC220, COSC241, COSC281]
+    min_grade: C
+    note: >-
+      Uncontested. Every other COSC course in the catalog depends on this sequence,
+      directly or transitively, and all four official sources list these five.
+
+  - id: cs_capstone
+    name: Senior Project
+    type: all_of
+    courses: [COSC490]
+    min_grade: C
+    advisor_approval_required: true
+    note: >-
+      COSC490 has no course prerequisite. It is gated on Department Chair permission
+      and senior standing, which the schema cannot express, so the engine must defer
+      to a human rather than report this as automatically satisfiable.
+
+  - id: cumulative_gpa
+    name: Minimum Cumulative GPA
+    type: gpa
+    min_gpa: 2.0
+    scope: cumulative
+
+  - id: major_gpa
+    name: Minimum Major GPA
+    type: gpa
+    min_gpa: 2.0
+    scope: major
+
+  # NOT YET ENCODED - each blocked on an open question:
+  #   major course groups A/B/C  -> Q1 (59 vs 65 credits), Q2 (Group C 3 vs 4)
+  #   general education          -> Q3 (40 vs 44 credits)
+  #   residency                  -> Q4 (all upper-div major vs two-thirds)
+  #   orientation                -> Q5 (ORNS 106 vs UNIV 101 vs both)
+  #   COSC462 eligibility        -> Q6 (prerequisite COSC 459 does not exist)

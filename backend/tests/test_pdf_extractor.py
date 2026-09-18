@@ -39,6 +39,14 @@ from app.schemas.provenance import Provenance
 
 MORGAN = Path(__file__).resolve().parents[2] / "data" / "catalog" / "morgan_cosc_bs_2026_2028.yaml"
 
+# PDF reading needs the `ingestion` extra. CI installs it, so these run there; a
+# developer who has not installed it gets a clear skip instead of a wall of
+# ModuleNotFoundError.
+pdfplumber = pytest.importorskip(
+    "pdfplumber",
+    reason='pdfplumber not installed - run: pip install -e ".[ingestion]"',
+)
+
 TRANSCRIPT_LINES = [
     "MORGAN STATE UNIVERSITY",
     "Fall 2024",

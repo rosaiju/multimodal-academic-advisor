@@ -2,7 +2,7 @@
 name = "advisor-ai-backend"
 version = "0.1.0"
 description = "Multimodal AI academic advisor — COSC 490 senior project"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 
 dependencies = [
     "fastapi>=0.115",

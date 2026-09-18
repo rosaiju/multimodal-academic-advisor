@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.catalog.registry import registry
 from app.config import get_settings
+from app.routers import catalog as catalog_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -82,7 +83,9 @@ def list_programs() -> list[dict[str, object]]:
     ]
 
 
-# Routers land here as each owner delivers them:
+app.include_router(catalog_router.router)
+
+# Remaining routers land here as each owner delivers them:
 #   app.include_router(audit.router)     # Person 1
 #   app.include_router(chat.router)      # Person 2
 #   app.include_router(ingest.router)    # Person 3

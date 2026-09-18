@@ -11,6 +11,7 @@ The rule enforced throughout the codebase:
 """
 
 from enum import StrEnum
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -43,7 +44,10 @@ BADGE_TEXT: dict[Provenance, str] = {
 }
 
 
-class Sourced[T](BaseModel):
+T = TypeVar("T")
+
+
+class Sourced(BaseModel, Generic[T]):
     """A value plus where it came from.
 
     Wrap anything the user will see whose trustworthiness matters:

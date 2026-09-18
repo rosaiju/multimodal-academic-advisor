@@ -61,9 +61,7 @@ class TestReferentialIntegrity:
 
     def test_block_naming_unknown_course_is_rejected(self) -> None:
         bad = self._minimal(
-            requirement_blocks=[
-                {"id": "b1", "name": "B", "type": "all_of", "courses": ["TYPO999"]}
-            ]
+            requirement_blocks=[{"id": "b1", "name": "B", "type": "all_of", "courses": ["TYPO999"]}]
         )
         with pytest.raises(ValueError, match="unknown course"):
             Program.model_validate(bad)

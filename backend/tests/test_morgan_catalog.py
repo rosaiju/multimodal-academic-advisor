@@ -160,8 +160,21 @@ class TestProvisionalStatus:
             demanded = getattr(block, "credits_required", None)
             assert demanded not in (Decimal(59), Decimal(65), Decimal(40), Decimal(44)), block.id
 
-    def test_composition_block_defers_to_a_human(self, morgan: Program) -> None:
-        """n_of cannot express 'one from Part A AND one from Part B', so the block
-        over-accepts and must not be reported as automatically satisfied."""
+    def test_composition_block_enforces_both_parts(self, morgan: Program) -> None:
+        """Composition is Part A + Part B, not "any two of four".
+
+        This was an n_of block flagged for advisor review because the schema could
+        not express the pairing. It is now each_of, which enforces it outright.
+        """
         block = next(b for b in morgan.requirement_blocks if b.id == "gen_ed_composition")
-        assert block.advisor_approval_required
+        assert block.type == "each_of"
+        assert block.groups == [["ENGL101", "ENGL111"], ["ENGL102", "ENGL112"]]
+        assert block.group_names == ["Part A", "Part B"]
+        assert not block.advisor_approval_required
+
+    def test_composition_rejects_two_courses_from_one_part(self, morgan: Program) -> None:
+        """The exact bug each_of was built to fix: ENGL101 + ENGL111 is not enough."""
+        block = next(b for b in morgan.requirement_blocks if b.id == "gen_ed_composition")
+        part_a, part_b = block.groups
+        assert set(part_a).isdisjoint(part_b), "parts must be distinct for the pairing to bind"
+        assert len(block.groups) == 2

@@ -404,18 +404,21 @@ requirement_blocks:
 
   - id: gen_ed_composition
     name: General Education - English Composition
-    type: n_of
-    n: 2
-    courses: [ENGL101, ENGL111, ENGL102, ENGL112]
+    type: each_of
+    groups:
+      - [ENGL101, ENGL111]
+      - [ENGL102, ENGL112]
+    group_names: ["Part A", "Part B"]
+    min_grade: C
     source: >-
       [GENED] category "EC (English Composition) - 6 credits", Part A
       (ENGL 101 or ENGL 111) and Part B (ENGL 102 or ENGL 112). [PLANNER] lists
       the same four with the same OR structure.
     note: >-
-      n_of cannot express "one from Part A AND one from Part B" - a student taking
-      ENGL101 and ENGL111 would satisfy this block but not the requirement. Needs
-      two separate blocks once the schema supports paired OR-groups.
-    advisor_approval_required: true
+      Part B is the sequel to Part A, so the pairing is real: ENGL102 lists ENGL101
+      as its prerequisite. each_of enforces one course from each part, which n_of
+      could not - under n_of a student taking ENGL101 and ENGL111 satisfied the
+      block without having done Part B at all.
 
   - id: first_year_seminar
     name: University First-Year Seminar

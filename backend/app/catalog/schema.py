@@ -117,6 +117,61 @@ class NOfBlock(_BlockBase):
         return self
 
 
+class EachOfBlock(_BlockBase):
+    """One course from EACH listed group, and no course may count twice.
+
+    This is the shape a catalog takes when it says "Part A: ENGL 101 or ENGL 111;
+    Part B: ENGL 102 or ENGL 112". `n_of` cannot express it: with n=2 over all four
+    courses, a student who took ENGL 101 *and* ENGL 111 would satisfy the block
+    while having done neither Part B nor, in reality, the requirement.
+
+    Distinctness is the whole point. A course that appears in two groups may be
+    applied to only one of them, which makes satisfying this block an assignment
+    problem, not a counting problem. The audit engine solves it; the schema only
+    guarantees the shape is sane.
+    """
+
+    type: Literal["each_of"] = "each_of"
+    groups: list[list[str]] = Field(
+        min_length=1,
+        description="Each inner list is one OR-group. Every group must be satisfied "
+        "by a DIFFERENT completed course.",
+    )
+    group_names: list[str] | None = Field(
+        default=None,
+        description="Optional human labels, parallel to `groups`, e.g. "
+        "['Part A', 'Part B']. Used for display only.",
+    )
+
+    @model_validator(mode="after")
+    def _groups_are_sane(self) -> EachOfBlock:
+        for i, group in enumerate(self.groups):
+            if not group:
+                raise ValueError(f"block {self.id!r}: group {i} is empty")
+            if len(set(group)) != len(group):
+                raise ValueError(f"block {self.id!r}: group {i} repeats a course")
+
+        # n groups need n distinct courses between them, or no assignment exists.
+        distinct = {code for group in self.groups for code in group}
+        if len(distinct) < len(self.groups):
+            raise ValueError(
+                f"block {self.id!r}: {len(self.groups)} groups but only "
+                f"{len(distinct)} distinct course(s) - unsatisfiable"
+            )
+
+        if self.group_names is not None and len(self.group_names) != len(self.groups):
+            raise ValueError(
+                f"block {self.id!r}: {len(self.group_names)} group_names for "
+                f"{len(self.groups)} groups"
+            )
+        return self
+
+    @property
+    def courses(self) -> list[str]:
+        """Flattened course list, de-duplicated, for referential-integrity checks."""
+        return list(dict.fromkeys(code for group in self.groups for code in group))
+
+
 class CourseFilter(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -167,7 +222,7 @@ class ResidencyBlock(_BlockBase):
 
 
 RequirementBlock = Annotated[
-    AllOfBlock | NOfBlock | CreditsFromBlock | GpaBlock | ResidencyBlock,
+    AllOfBlock | NOfBlock | EachOfBlock | CreditsFromBlock | GpaBlock | ResidencyBlock,
     Field(discriminator="type"),
 ]
 

@@ -1,0 +1,89 @@
+"""FastAPI application entry point.
+
+Run:  uvicorn app.main:app --reload
+Docs: http://localhost:8000/docs
+"""
+
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.catalog.registry import registry
+from app.config import get_settings
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    # Deliberately NOT wrapped in try/except: a malformed catalog must stop the
+    # server, not start it with silently-wrong degree requirements.
+    registry.load(settings.catalog_dir)
+    logger.info(
+        "catalog ready (%d programs); llm_provider=%s configured=%s",
+        len(registry.list_programs()),
+        settings.llm_provider,
+        settings.llm_configured,
+    )
+    yield
+
+
+app = FastAPI(
+    title="Multimodal AI Academic Advisor",
+    description=(
+        "COSC 490 senior project. Degree progress is computed by a deterministic "
+        "rules engine, never by a language model. All student data is fictional."
+    ),
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health", tags=["system"])
+def health() -> dict[str, object]:
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "catalog_loaded": registry.is_loaded,
+        "programs": [p.program_id for p in registry.list_programs()],
+        "llm_provider": settings.llm_provider,
+        "llm_configured": settings.llm_configured,
+    }
+
+
+@app.get("/programs", tags=["catalog"])
+def list_programs() -> list[dict[str, object]]:
+    """Every degree program the engine can audit against."""
+    return [
+        {
+            "program_id": p.program_id,
+            "program": p.program,
+            "institution": p.institution,
+            "catalog_year": p.catalog_year,
+            "total_credits_required": p.total_credits_required,
+            "requirement_blocks": len(p.requirement_blocks),
+            "courses": len(p.courses),
+        }
+        for p in registry.list_programs()
+    ]
+
+
+# Routers land here as each owner delivers them:
+#   app.include_router(audit.router)     # Person 1
+#   app.include_router(chat.router)      # Person 2
+#   app.include_router(ingest.router)    # Person 3
+#   app.include_router(students.router)  # Person 3

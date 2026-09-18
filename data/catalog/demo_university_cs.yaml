@@ -1,0 +1,232 @@
+# Fictional program used for fast tests and early development.
+#
+# The real Morgan State COSC B.S. catalog lives in morgan_cosc_bs_2024.yaml
+# (Person 1, Week 1). This file is deliberately small so the test suite stays fast.
+#
+# NOTE: this program is constructed so that greedy and optimal course-to-requirement
+# matching produce DIFFERENT answers. See tests/test_matcher.py and the Milestone 1
+# demo script. COSC350 is eligible for both `systems_concentration` and
+# `cs_electives_upper`; spending it greedily on electives leaves systems unmet.
+
+program_id: demo_cs_bs
+program: BS Computer Science
+institution: Demo University
+catalog_year: "2024-2025"
+total_credits_required: 120
+min_gpa: 2.0
+min_major_gpa: 2.0
+major_subjects: [COSC]
+
+courses:
+  # --- CS core ---
+  - code: COSC111
+    title: Introduction to Computer Science I
+    credits: 4
+    terms_offered: [fall, spring]
+
+  - code: COSC112
+    title: Introduction to Computer Science II
+    credits: 4
+    prerequisites: [COSC111]
+    min_prereq_grade: C
+
+  - code: COSC220
+    title: Data Structures and Algorithms
+    credits: 4
+    prerequisites: [COSC112]
+    min_prereq_grade: C
+
+  - code: COSC241
+    title: Computer Systems and Digital Logic
+    credits: 3
+    prerequisites: [COSC112]
+
+  - code: COSC281
+    title: Discrete Structures
+    credits: 3
+    prerequisites: [MATH241]
+
+  # --- CS upper division ---
+  - code: COSC320
+    title: Design and Analysis of Algorithms
+    credits: 3
+    prerequisites: [COSC220, COSC281]
+    min_prereq_grade: C
+    terms_offered: [fall]
+
+  - code: COSC349
+    title: Computer Networks
+    credits: 3
+    prerequisites: [COSC241]
+    terms_offered: [spring]
+
+  - code: COSC350
+    title: Operating Systems
+    credits: 3
+    prerequisites: [COSC220, COSC241]
+    min_prereq_grade: C
+    terms_offered: [fall]
+
+  - code: COSC370
+    title: Database Systems
+    credits: 3
+    prerequisites: [COSC220]
+    terms_offered: [fall, spring]
+
+  - code: COSC385
+    title: Theory of Computation
+    credits: 3
+    prerequisites: [COSC281]
+    terms_offered: [spring]
+
+  - code: COSC420
+    title: Introduction to Machine Learning
+    credits: 3
+    prerequisites: [COSC320, MATH312]
+    terms_offered: [spring]
+
+  - code: COSC450
+    title: Software Engineering
+    credits: 3
+    prerequisites: [COSC220]
+    terms_offered: [fall, spring]
+
+  - code: COSC490
+    title: Senior Capstone Project
+    credits: 3
+    prerequisites: [COSC450]
+    min_prereq_grade: C
+    terms_offered: [fall, spring]
+
+  # --- Math and science ---
+  - code: MATH241
+    title: Calculus I
+    credits: 4
+    terms_offered: [fall, spring, summer]
+
+  - code: MATH242
+    title: Calculus II
+    credits: 4
+    prerequisites: [MATH241]
+    min_prereq_grade: C
+
+  - code: MATH312
+    title: Linear Algebra
+    credits: 3
+    prerequisites: [MATH242]
+
+  - code: PHYS211
+    title: General Physics I
+    credits: 4
+    prerequisites: [MATH241]
+
+  - code: BIOL101
+    title: General Biology
+    credits: 4
+
+  # --- General education ---
+  - code: ENGL101
+    title: Freshman Composition I
+    credits: 3
+    terms_offered: [fall, spring, summer]
+
+  - code: ENGL102
+    title: Freshman Composition II
+    credits: 3
+    prerequisites: [ENGL101]
+
+  - code: HIST105
+    title: World History
+    credits: 3
+
+  - code: PHIL109
+    title: Introduction to Ethics
+    credits: 3
+
+  - code: ECON211
+    title: Principles of Microeconomics
+    credits: 3
+
+requirement_blocks:
+  - id: core_cs_lower
+    name: Computer Science Core (Lower Division)
+    type: all_of
+    courses: [COSC111, COSC112, COSC220, COSC241, COSC281]
+    min_grade: C
+
+  - id: core_cs_upper
+    name: Computer Science Core (Upper Division)
+    type: all_of
+    courses: [COSC320, COSC490]
+    min_grade: C
+
+  # A course here is ALSO eligible for cs_electives_upper below. This overlap is
+  # what makes naive greedy assignment under-report progress.
+  - id: systems_concentration
+    name: Systems Concentration
+    type: n_of
+    n: 2
+    courses: [COSC241, COSC349, COSC350, COSC370]
+    min_grade: C
+    note: >-
+      COSC241 may count here only if it is not already applied to the lower-division
+      core. The matcher enforces this; it is not a suggestion.
+
+  - id: cs_electives_upper
+    name: Upper-Division Computer Science Electives
+    type: credits_from
+    credits_required: 9
+    min_grade: C
+    course_filter:
+      subject: COSC
+      number_min: 300
+      exclude: [COSC320, COSC490]
+
+  - id: math_sequence
+    name: Mathematics Sequence
+    type: all_of
+    courses: [MATH241, MATH242]
+    min_grade: C
+
+  - id: math_elective
+    name: Additional Mathematics
+    type: n_of
+    n: 1
+    courses: [MATH312, PHYS211]
+
+  - id: gen_ed_composition
+    name: General Education - Composition
+    type: all_of
+    courses: [ENGL101, ENGL102]
+
+  - id: gen_ed_humanities
+    name: General Education - Humanities and Social Science
+    type: n_of
+    n: 2
+    courses: [HIST105, PHIL109, ECON211]
+    note: >-
+      An approved study-abroad or honors seminar may substitute for one course here.
+    advisor_approval_required: true
+
+  - id: gen_ed_science
+    name: General Education - Laboratory Science
+    type: n_of
+    n: 1
+    courses: [PHYS211, BIOL101]
+
+  - id: cumulative_gpa
+    name: Minimum Cumulative GPA
+    type: gpa
+    min_gpa: 2.0
+    scope: cumulative
+
+  - id: major_gpa
+    name: Minimum Major GPA
+    type: gpa
+    min_gpa: 2.0
+    scope: major
+
+  - id: residency
+    name: Residency Requirement
+    type: residency
+    min_credits_at_institution: 30

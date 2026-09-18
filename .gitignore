@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets — never commit
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite3
+
+# Uploads (fictional student docs still don't belong in git)
+backend/uploads/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

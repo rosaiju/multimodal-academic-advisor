@@ -104,6 +104,41 @@ class MatcherStrategy(StrEnum):
     OPTIMAL_BIPARTITE = "optimal_bipartite"
 
 
+class CatalogCoverage(BaseModel):
+    """How much of the degree the encoded catalog can actually speak to.
+
+    The Morgan catalog deliberately omits every requirement its official sources
+    contradict, rather than guessing one. An audit against it is therefore PARTIAL,
+    and a caller must be able to tell the difference between "you have not done
+    these requirements" and "we have not encoded these requirements".
+
+    Without this, a UI showing "5 of 6 requirements complete" reads as almost-done
+    when the real degree has roughly twice that many requirement areas.
+    """
+
+    blocks_encoded: int
+    courses_in_catalog: int
+    courses_satisfying_no_block: int
+    credits_explicitly_demanded: Decimal
+    total_credits_required: Decimal
+
+    @property
+    def is_complete(self) -> bool:
+        """True only when every catalog course is claimed by some requirement."""
+        return self.courses_satisfying_no_block == 0
+
+    @property
+    def summary(self) -> str:
+        if self.is_complete:
+            return f"{self.blocks_encoded} requirement blocks; all courses covered."
+        return (
+            f"PARTIAL: {self.blocks_encoded} requirement blocks encoded; "
+            f"{self.courses_satisfying_no_block} of {self.courses_in_catalog} catalog "
+            "courses satisfy no encoded requirement. Requirements still awaiting "
+            "department clarification are absent, not failed."
+        )
+
+
 class AuditResult(BaseModel):
     student_id: str
     program_id: str
@@ -125,6 +160,9 @@ class AuditResult(BaseModel):
     critical_path: list[CourseRef] = Field(default_factory=list)
 
     strategy: MatcherStrategy
+
+    #: Set by the engine. None only on hand-built mocks from before this existed.
+    coverage: CatalogCoverage | None = None
     #: Always VERIFIED — this object is engine output by construction.
     provenance: Provenance = Provenance.VERIFIED
 
@@ -136,6 +174,15 @@ class AuditResult(BaseModel):
 
     @property
     def is_graduation_eligible(self) -> bool:
+        """Never True while the catalog itself is known to be incomplete.
+
+        Satisfying every ENCODED block is not the same as satisfying the degree when
+        requirements are still missing from the catalog. Answering "yes, you can
+        graduate" on a partial catalog is the single worst thing this system could
+        do, so an incomplete catalog fails closed.
+        """
+        if self.coverage is not None and not self.coverage.is_complete:
+            return False
         return (
             self.total_credits_applied >= self.total_credits_required
             and self.gpa.meets_requirements

@@ -32,6 +32,12 @@ class CompletedCourse(BaseModel):
     grade: str
     credits: Decimal
     provenance: Provenance = Provenance.VERIFIED
+    institution: str | None = Field(
+        default=None,
+        description="Where the course was taken. Absent means UNKNOWN, not 'here' - "
+        "residency cannot be decided without it, and assuming residence would "
+        "silently pass a transfer student who has not met the requirement.",
+    )
 
     @property
     def is_trusted(self) -> bool:

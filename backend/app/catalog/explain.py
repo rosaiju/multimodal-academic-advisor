@@ -26,6 +26,7 @@ from app.catalog.schema import (
     AllOfBlock,
     Course,
     CreditsFromBlock,
+    EachOfBlock,
     GpaBlock,
     NOfBlock,
     Program,
@@ -108,6 +109,13 @@ def describe_requirement(program: Program, block: RequirementBlock) -> str:
             return f"All of: {_course_list(block.courses)}"
         case NOfBlock():
             return f"Any {block.n} of: {_course_list(block.courses)}"
+        case EachOfBlock():
+            names = block.group_names or [f"Group {i + 1}" for i in range(len(block.groups))]
+            parts = [
+                f"{name} ({' or '.join(group)})"
+                for name, group in zip(names, block.groups, strict=True)
+            ]
+            return "One course from each of: " + "; ".join(parts)
         case CreditsFromBlock():
             if block.course_filter is not None:
                 filt = block.course_filter
@@ -141,6 +149,8 @@ def describe_block(program: Program, block: RequirementBlock) -> BlockSummary:
         courses_required = len(block.courses)
     elif isinstance(block, NOfBlock):
         courses_required = block.n
+    elif isinstance(block, EachOfBlock):
+        courses_required = len(block.groups)
 
     return BlockSummary(
         block_id=block.id,

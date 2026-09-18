@@ -152,3 +152,21 @@ the COSC band. Sixteen other COSC courses named by `[PLANNER]` (201, 210, 215, 3
 COSC 462's prerequisite on COSC 459 was valid all along. **Nothing was wrong with the
 catalog here; the harvest method was wrong.** This is why the course layer is now built
 from the degree-requirement pages rather than by enumerating IDs.
+
+### Q11 — COSC 349 prerequisite is catalog-year dependent
+
+`[COURSE]` for COSC 349 Computer Networks states two prerequisites, verbatim:
+
+> "COSC 243 completed with a grade of 'C' or higher **for Fall 2024** COSC 112 only
+> completed with a grade of 'C' or higher **for Spring 2025 moving forward**"
+
+The YAML encodes **COSC 112**, on the reading that a 2026-2028 catalog falls under
+"Spring 2025 moving forward." That reading is almost certainly right, but it is *our
+reading of one source*, not a second source confirming it — and it is the only place
+in this file where a prerequisite was chosen rather than transcribed.
+
+It is flagged here rather than left silent because getting it backwards has a real
+cost: requiring COSC 243 when the catalog does not would block a student from a course
+they are eligible for. Low risk, cheap to confirm.
+
+**Ask:** *for a student on the 2026-2028 catalog, is COSC 349's prerequisite COSC 112 or COSC 243?*

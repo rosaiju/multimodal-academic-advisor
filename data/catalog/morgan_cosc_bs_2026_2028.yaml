@@ -12,6 +12,14 @@
 #   [COURSE]  catalog.morgan.edu/preview_course_nopop.php?catoid=28&coid=N
 #             Individual course records - used ONLY for prerequisite text.
 #
+# TITLE NORMALIZATION (the only edit applied to any transcribed value)
+#   [PLANNER] appends general-education category tags to some titles and uses a
+#   non-ASCII dash. Tags are stripped and the dash normalized to " - ". Affects
+#   exactly three rows; credits and codes are never altered:
+#     ENGL102  source "Composition II (EC)"       -> "Composition II"
+#     ENGL111  source "Composition I<dash>Honors EC"  -> "Composition I - Honors"
+#     ENGL112  source "Composition II<dash>Honors (EC)" -> "Composition II - Honors"
+#
 # Course codes, titles and credits are transcribed from [PLANNER]. Prerequisites
 # come from [COURSE]. Where no source was consulted, the field is ABSENT and the
 # course carries a comment saying so - never a guess.
@@ -134,6 +142,12 @@ courses:
   - code: COSC349
     title: "Computer Networks"
     credits: 3
+    # [COURSE] states TWO prerequisites keyed to catalog year, verbatim:
+    #   "COSC 243 ... for Fall 2024   COSC 112 only ... for Spring 2025 moving forward"
+    # COSC112 is encoded because this is the 2026-2028 catalog, which falls under
+    # "Spring 2025 moving forward". That is a READING of the source, not a second
+    # source confirming it - see open question Q11. If Q11 resolves the other way
+    # the prerequisite is COSC243.
     prerequisites: [COSC112]
     min_prereq_grade: "C"
     offered_as_needed: true

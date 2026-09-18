@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from app.catalog.schema import Program
+from app.ingestion.errors import DocumentNotReadable, UnsupportedDocument
 from app.ingestion.models import ExtractionResult
 from app.ingestion.parser import EXTRACTOR_NAME, parse_transcript_text
 
@@ -78,10 +79,6 @@ class TextTranscriptExtractor:
         return parse_transcript_text(text, source_name=filename, program=program)
 
 
-class UnsupportedDocument(RuntimeError):
-    """No registered extractor can read this document."""
-
-
 _registry: list[TranscriptExtractor] = [TextTranscriptExtractor()]
 
 
@@ -98,6 +95,13 @@ def register_extractor(extractor: TranscriptExtractor) -> None:
 
 def registered_extractors() -> list[str]:
     return [e.name for e in _registry]
+
+
+def candidate_extractors(
+    filename: str, content_type: str | None = None
+) -> list[TranscriptExtractor]:
+    """Every extractor willing to try this file, in preference order."""
+    return [e for e in _registry if e.can_handle(filename, content_type)]
 
 
 def select_extractor(filename: str, content_type: str | None = None) -> TranscriptExtractor:
@@ -119,7 +123,45 @@ def extract_transcript(
     content_type: str | None = None,
     program: Program | None = None,
 ) -> ExtractionResult:
-    """Read a transcript with whichever extractor fits. Output is never trusted."""
-    return select_extractor(filename, content_type).extract(
-        data, filename=filename, program=program, content_type=content_type
+    """Read a transcript with the best extractor that can actually read it.
+
+    Candidates are tried in registration order, so the deterministic readers get
+    first refusal and a model is reached only when they decline. An extractor that
+    raises DocumentNotReadable is passing, not failing - the next one tries.
+    """
+    candidates = candidate_extractors(filename, content_type)
+    if not candidates:
+        raise UnsupportedDocument(
+            f"no extractor can read {filename!r} (type {content_type!r}). "
+            f"Available: {', '.join(registered_extractors())}. "
+            "Plain-text transcripts always work; scans and images need the document "
+            "reader, which is not configured."
+        )
+
+    declined: list[str] = []
+    for extractor in candidates:
+        try:
+            return extractor.extract(
+                data, filename=filename, program=program, content_type=content_type
+            )
+        except DocumentNotReadable as exc:
+            logger.info("%s declined %s: %s", extractor.name, filename, exc)
+            declined.append(f"{extractor.name}: {exc}")
+
+    raise UnsupportedDocument(
+        f"{filename!r} could not be read by any available extractor. " + " | ".join(declined)
     )
+
+
+def _register_pdf_extractor() -> None:
+    """Registered here so the PDF reader sits ahead of any model-backed one.
+
+    A local import: app/ingestion/pdf.py imports DocumentNotReadable from this
+    module, and by the time this runs that name exists.
+    """
+    from app.ingestion.pdf import PdfTranscriptExtractor
+
+    _registry.append(PdfTranscriptExtractor())
+
+
+_register_pdf_extractor()

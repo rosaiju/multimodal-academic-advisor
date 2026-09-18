@@ -27,6 +27,15 @@ async def lifespan(app: FastAPI):
     # Deliberately NOT wrapped in try/except: a malformed catalog must stop the
     # server, not start it with silently-wrong degree requirements.
     registry.load(settings.catalog_dir)
+
+    # Registered here, from outside the ingestion package, so app/ingestion/ never
+    # imports app/llm/. Absent an API key this is a no-op and text transcripts
+    # keep working.
+    from app.llm.registration import register_vision_extractor
+
+    vision = register_vision_extractor(settings)
+    logger.info("vision transcript extractor: %s", vision or "not configured")
+
     logger.info(
         "catalog ready (%d programs); llm_provider=%s configured=%s",
         len(registry.list_programs()),

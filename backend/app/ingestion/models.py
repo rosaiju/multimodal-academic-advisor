@@ -51,6 +51,11 @@ class ExtractedCourse(BaseModel):
     credits: Decimal | None = None
 
     title: str | None = Field(default=None, description="As printed, for the student to check")
+    institution: str | None = Field(
+        default=None,
+        description="Where the course was taken, when the document says. Feeds the "
+        "residency requirement, which is NEEDS_ADVISOR without it.",
+    )
     confidence: Confidence = Confidence.LOW
     issues: list[str] = Field(
         default_factory=list,
@@ -94,7 +99,7 @@ class ExtractedCourse(BaseModel):
             grade=self.grade,
             credits=self.credits,
             provenance=Provenance.STUDENT_CONFIRMED,
-            institution=institution,
+            institution=institution if institution is not None else self.institution,
         )
 
 
@@ -105,6 +110,10 @@ class ExtractionResult(BaseModel):
 
     source_name: str = Field(description="Original filename, for the audit trail")
     extractor: str = Field(description="Which extractor ran, e.g. 'text-parser' or a model id")
+    institution: str | None = Field(
+        default=None,
+        description="Institution named on the document as a whole, if it names one.",
+    )
     courses: list[ExtractedCourse] = Field(default_factory=list)
     warnings: list[str] = Field(
         default_factory=list,

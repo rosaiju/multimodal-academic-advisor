@@ -49,6 +49,7 @@ class TranscriptExtractor(Protocol):
         *,
         filename: str,
         program: Program | None = None,
+        content_type: str | None = None,
     ) -> ExtractionResult: ...
 
 
@@ -68,6 +69,7 @@ class TextTranscriptExtractor:
         *,
         filename: str,
         program: Program | None = None,
+        content_type: str | None = None,
     ) -> ExtractionResult:
         # Transcripts come from every registrar system imaginable; refusing on an
         # odd byte helps nobody, so undecodable bytes are replaced and the parser
@@ -119,5 +121,5 @@ def extract_transcript(
 ) -> ExtractionResult:
     """Read a transcript with whichever extractor fits. Output is never trusted."""
     return select_extractor(filename, content_type).extract(
-        data, filename=filename, program=program
+        data, filename=filename, program=program, content_type=content_type
     )

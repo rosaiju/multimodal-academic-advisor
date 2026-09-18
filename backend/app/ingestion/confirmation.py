@@ -87,6 +87,7 @@ def confirm_course(
                 )
             )
 
+    final_institution = institution if institution is not None else extracted.institution
     final_term = term if term is not None else extracted.term
     final_grade = grade if grade is not None else extracted.grade
     final_credits = credits if credits is not None else extracted.credits
@@ -114,7 +115,7 @@ def confirm_course(
             grade=final_grade,
             credits=final_credits,
             provenance=Provenance.STUDENT_CONFIRMED,
-            institution=institution,
+            institution=final_institution,
         ),
         source_name=result.source_name,
         extractor=result.extractor,

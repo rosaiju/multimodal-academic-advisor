@@ -82,6 +82,13 @@ class _BlockBase(BaseModel):
     name: str
     min_grade: str = "D"
     note: str | None = None
+    source: str | None = Field(
+        default=None,
+        description="Where this requirement came from, precisely enough to re-check it: "
+        "the catalog URL and the exact heading or footnote it was read from. A block "
+        "without a source cannot be audited by a human, and every figure in this "
+        "catalog has at least one official page that disagrees with it.",
+    )
     advisor_approval_required: bool = Field(
         default=False,
         description="Set when the catalog defers to human judgment, e.g. an approved "

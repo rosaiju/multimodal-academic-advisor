@@ -1,415 +1,438 @@
 # Morgan State University - B.S. Computer Science - 2026-2028 Undergraduate Catalog
 #
-# Morgan publishes BIENNIAL catalogs. There is no 2026-2027 edition; 2026-2028 is
-# the correct one for students entering Fall 2026.
+# Morgan publishes BIENNIAL catalogs. There is no 2026-2027 edition.
 #
-# PROVENANCE
-#   Course rows (code, title, credits, prerequisites, offering) are transcribed
-#   mechanically from the official catalog via preview_degree_planner.php
-#   (catoid=28, poid=6521) and preview_course_nopop.php. Nothing here is inferred.
+# SOURCES (every requirement below cites one of these in its `source` field)
+#   [PLANNER] catalog.morgan.edu/preview_degree_planner.php?catoid=28&poid=6521
+#             "Computer Science, B.S." degree requirements - the primary source.
+#   [SEQ]     catalog.morgan.edu/preview_degree_planner.php?catoid=28&poid=6630
+#             "Computer Science Curriculum Sequence" - the suggested 4-year plan.
+#   [GENED]   catalog.morgan.edu/preview_degree_planner.php?catoid=28&poid=6522
+#             University General Education Requirements.
+#   [COURSE]  catalog.morgan.edu/preview_course_nopop.php?catoid=28&coid=N
+#             Individual course records - used ONLY for prerequisite text.
 #
-# STATUS: COURSE LAYER COMPLETE - REQUIREMENT BLOCKS PROVISIONAL
-#   All 37 COSC courses and the full COSC prerequisite graph are encoded and verified.
-#   The requirement_blocks below are deliberately INCOMPLETE. Six unresolved
-#   contradictions in the official sources make the group structure and credit
-#   totals unsafe to encode; see docs/catalog-open-questions.md. Blocks are added
-#   only as each question is answered by the department. Do not fill them in from
-#   a secondary source - CS Navigator's public API is known to serve stale data.
+# Course codes, titles and credits are transcribed from [PLANNER]. Prerequisites
+# come from [COURSE]. Where no source was consulted, the field is ABSENT and the
+# course carries a comment saying so - never a guess.
 #
-# *** This file is DATA, not advice. The LLM never reads it to compute progress;
-#     the audit engine does. See tests/test_no_llm_in_engine.py. ***
+# STATUS: course layer sourced; disputed requirement blocks NOT encoded.
+#   [PLANNER] and [SEQ] are both official and they contradict each other on
+#   elective group membership and on how many courses each group needs. Those
+#   blocks stay out until the department resolves them.
+#   See docs/catalog-open-questions.md.
+#
+# *** DATA, not advice. The LLM never reads this to compute progress; the audit
+#     engine does. See tests/test_no_llm_in_engine.py. ***
 
 program_id: morgan_cosc_bs_2026_2028
 program: BS Computer Science
 institution: Morgan State University
 catalog_year: "2026-2028"
 
-# 120 is the university-wide baccalaureate minimum and is NOT one of the disputed
-# figures. The disputed numbers (major 59 vs 65, gen ed 40 vs 44) are not encoded.
+# [PLANNER] "TOTAL 120". Undisputed - [SEQ] also totals 120.
 total_credits_required: 120
+
+# [PLANNER] "Cumulative average of 2.0 or better and a major average of 2.0 or better"
 min_gpa: 2.0
 min_major_gpa: 2.0
 major_subjects: [COSC]
 
 courses:
-  # ---------------------------------------------------------------------------
-  # MATH prerequisite stubs - UNVERIFIED PLACEHOLDERS
-  #
-  # Four COSC courses name MATH prerequisites, but the harvest covered subjects
-  # CHEM..MMJN only, so no MATH record exists yet. These stubs exist SOLELY to keep
-  # the prerequisite graph honest and satisfy referential integrity.
-  #
-  # credits: 0 is deliberate. A guessed credit value would flow into audit totals
-  # and produce a plausible-but-wrong answer; zero fails loudly instead. Replace
-  # all three from the real MATH harvest before any credit total is trusted.
-  # ---------------------------------------------------------------------------
+  # MATH141 is the one course here NOT named by [PLANNER]. It appears only as a
+  # prerequisite of COSC241 in [COURSE]. No title or credit source consulted, so
+  # both are left explicitly unverified and credits are 0 - a guessed credit value
+  # would flow into audit totals and produce a plausible-but-wrong number.
   - code: MATH141
-    title: "UNVERIFIED PLACEHOLDER - pending MATH harvest"
+    title: "UNVERIFIED - named only as a COSC241 prerequisite, not in [PLANNER]"
     credits: 0
+
+  - code: ENGL101
+    title: "Composition I"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: ENGL111
+    title: "Composition I - Honors"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: ENGL102
+    title: "Composition II"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: ENGL112
+    title: "Composition II - Honors"
+    credits: 3
+    # no prerequisite source consulted for this course yet
 
   - code: MATH241
-    title: "UNVERIFIED PLACEHOLDER - pending MATH harvest"
-    credits: 0
+    title: "Calculus I"
+    credits: 4
+    # no prerequisite source consulted for this course yet
 
   - code: MATH242
-    title: "UNVERIFIED PLACEHOLDER - pending MATH harvest"
-    credits: 0
+    title: "Calculus II"
+    credits: 4
+    # no prerequisite source consulted for this course yet
 
-  # ---------------------------------------------------------------------------
-  # COSC - all 37 courses, generated from the harvest (see PROVENANCE above)
-  # ---------------------------------------------------------------------------
-  - code: COSC110
-    title: "Introduction to Computing"
+  - code: MATH312
+    title: "Linear Algebra I"
     credits: 3
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
+    # no prerequisite source consulted for this course yet
+
+  - code: MATH313
+    title: "Linear Algebra II"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: MATH331
+    title: "Applied Probability and Statistics"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: UNIV101
+    title: "University First-Year Seminar"
+    credits: 1
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC201
+    title: "Computer Ethics"
+    credits: 1
+    # no prerequisite source consulted for this course yet
 
   - code: COSC111
     title: "Introduction to Computer Science I"
     credits: 4
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
+    # no prerequisite source consulted for this course yet
 
   - code: COSC112
     title: "Introduction to Computer Science II"
     credits: 4
     prerequisites: [COSC111]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
-
-  - code: COSC150
-    title: "Computational Science and Data Analysis"
-    credits: 3
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
 
   - code: COSC220
     title: "Data Structures and Algorithms"
     credits: 4
     prerequisites: [COSC112]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
-
-  - code: COSC237
-    title: "Advanced Programming I"
-    credits: 4
-    prerequisites: [COSC112]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC238
-    title: "Object Oriented Programming"
-    credits: 4
-    prerequisites: [COSC112]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
-
-  - code: COSC239
-    title: "Java Programming"
-    credits: 3
-    prerequisites: [COSC112]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC241
-    title: "Computer Systems and Digital Logic"
-    credits: 3
-    prerequisites: [COSC112, MATH141]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
-    # NON-COURSE GATE: or Departmental permission
 
   - code: COSC243
     title: "Computer Organization and Architecture"
     credits: 3
     prerequisites: [COSC112]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
-
-  - code: COSC247
-    title: "Digital Logic"
-    credits: 3
-    prerequisites: [COSC243]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC251
-    title: "Introduction to Data Science"
-    credits: 3
-    prerequisites: [COSC112]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
 
   - code: COSC281
     title: "Discrete Structure"
     credits: 3
     prerequisites: [COSC112]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    # catalog offering string: FALL/SPRING
-
-  - code: COSC332
-    title: "Introduction to Game Design and Development"
-    credits: 3
-    prerequisites: [COSC112]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC343
-    title: "Microprocessor Systems and Applications"
-    credits: 3
-    prerequisites: [COSC243]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC345
-    title: "Introduction to High Performance Computing"
-    credits: 3
-    prerequisites: [COSC112, MATH241]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
 
   - code: COSC349
     title: "Computer Networks"
     credits: 3
     prerequisites: [COSC112]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC350
-    title: "Foundations of Computer Security and Information Assurance"
-    credits: 3
-    prerequisites: [COSC241]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
 
   - code: COSC351
     title: "Cybersecurity"
     credits: 3
     prerequisites: [COSC112]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: FALL OR SPRING
 
   - code: COSC352
     title: "Organization of Programming Languages"
     credits: 3
     prerequisites: [COSC220]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: FALL OR SPRING
 
   - code: COSC354
     title: "Operating Systems"
     credits: 3
     prerequisites: [COSC220, COSC241]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: FALL OR SPRING
+
+  - code: COSC458
+    title: "Software Engineering"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+    offered_as_needed: true
+
+  - code: COSC459
+    title: "Database Design"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC490
+    title: "Senior Project"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+    offered_as_needed: true
+
+  - code: COSC210
+    title: "Quantum Mechanics for Computer Scientists"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC215
+    title: "Quantum Computing I"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC238
+    title: "Object Oriented Programming"
+    credits: 4
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    offered_as_needed: true
+
+  - code: COSC239
+    title: "Java Programming"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    offered_as_needed: true
+
+  - code: COSC241
+    title: "Computer Systems and Digital Logic"
+    credits: 3
+    prerequisites: [COSC112, MATH141]
+    min_prereq_grade: "C"
+
+  - code: COSC251
+    title: "Introduction to Data Science"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+
+  - code: CLCO261
+    title: "Introduction to Cloud Computing"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC310
+    title: "Applied Quantum Technologies"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC315
+    title: "Quantum Computing II"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC320
+    title: "Algorithm Design and Analysis"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC323
+    title: "Introduction to Cryptography"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC332
+    title: "Introduction to Game Design and Development"
+    credits: 3
+    prerequisites: [COSC112]
+    min_prereq_grade: "C"
+    offered_as_needed: true
+
+  - code: COSC338
+    title: "Mobile App Design & Development"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC345
+    title: "Introduction to High Performance Computing"
+    credits: 3
+    prerequisites: [COSC112, MATH241]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: COSC358
     title: "Network Security Fundamentals"
     credits: 3
     prerequisites: [COSC349]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC373
-    title: "Foundations of Bioinformatics"
-    credits: 4
-    prerequisites: [COSC112]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC374
-    title: "Introduction to Bioprogramming"
-    credits: 3
-    prerequisites: [COSC373]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
 
   - code: COSC383
     title: "Numerical Methods and Programming"
     credits: 3
     prerequisites: [MATH242]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
 
   - code: COSC385
     title: "Theory of Languages and Automata"
     credits: 3
     prerequisites: [COSC220, COSC281]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
 
-  - code: COSC413
-    title: "Parallel Algorithms"
+  - code: COSC386
+    title: "Introduction to Quantum Computing"
     credits: 3
-    prerequisites: [COSC220]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
+    # no prerequisite source consulted for this course yet
 
-  - code: COSC456
-    title: "Compilers"
+  - code: COSC410
+    title: "Quantum Cryptography"
     credits: 3
-    prerequisites: [COSC385]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
+    # no prerequisite source consulted for this course yet
 
-  - code: COSC458
-    title: "Software Engineering"
+  - code: COSC415
+    title: "Capstone in Quantum Information Science"
     credits: 3
-    prerequisites: [COSC220]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: FALL OR SPRING
+    # no prerequisite source consulted for this course yet
 
   - code: COSC460
     title: "Computer Graphics"
     credits: 3
     prerequisites: [COSC220, MATH241]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
-
-  - code: COSC462
-    title: "Introduction to Database Security"
-    credits: 3
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-    # NON-COURSE GATE: catalog lists COSC 459, which does not exist - prerequisite DROPPED
 
   - code: COSC470
     title: "Artificial Intelligence"
     credits: 3
     prerequisites: [COSC220]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: FALL OR SPRING
 
-  - code: COSC471
-    title: "Expert Systems"
+  - code: COSC472
+    title: "Introduction to Machine Learning"
     credits: 3
-    prerequisites: [COSC470]
-    min_prereq_grade: "C"
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
+    # no prerequisite source consulted for this course yet
 
-  - code: COSC490
-    title: "Senior Project"
+  - code: COSC474
+    title: "Artificial Intelligence in Cybersecurity"
     credits: 3
-    terms_offered: [fall, spring]
-    offered_as_needed: true
-    # catalog offering string: AS NEEDED
-    # NON-COURSE GATE: Department Chair permission and senior standing
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC480
+    title: "Introduction to Image Processing and Analysis"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COSC486
+    title: "Applied Quantum Computing"
+    credits: 3
+    # no prerequisite source consulted for this course yet
 
   - code: COSC491
     title: "Special Topics in Computer Science"
     credits: 3
     prerequisites: [COSC220]
     min_prereq_grade: "C"
-    terms_offered: [fall, spring]
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
 
   - code: COSC498
     title: "Senior Internship"
     credits: 3
-    terms_offered: [fall, spring]
+    # no prerequisite source consulted for this course yet
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
-    # NON-COURSE GATE: 3.0 GPA, senior standing, Department Chair permission
 
   - code: COSC499
     title: "Senior Research or Teaching/Tutorial Assistantship"
     credits: 3
-    terms_offered: [fall, spring]
+    # no prerequisite source consulted for this course yet
     offered_as_needed: true
-    # catalog offering string: AS NEEDED
-    # NON-COURSE GATE: 3.0 GPA, senior standing, Department Chair permission
+
+  - code: CLCO401
+    title: "Cloud Applications"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: CLCO471
+    title: "Data Analytics in Cloud"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: EEGR463
+    title: "Digital Electronics"
+    credits: 3
+    # no prerequisite source consulted for this course yet
 requirement_blocks:
-  # Only requirements that NO official source contradicts are encoded here.
-  # Everything disputed lives in docs/catalog-open-questions.md until answered.
+  # Encoded ONLY where [PLANNER] and [SEQ] agree, or where [PLANNER] states a
+  # requirement that no other official page contradicts.
 
-  - id: cs_core_lower
-    name: Computer Science Core (Lower Division)
+  - id: major_required_courses
+    name: Required Courses for Computer Science Major
     type: all_of
-    courses: [COSC111, COSC112, COSC220, COSC241, COSC281]
+    courses: [COSC111, COSC112, COSC220, COSC243, COSC281, COSC349,
+              COSC351, COSC352, COSC354, COSC458, COSC459, COSC490]
     min_grade: C
+    source: >-
+      [PLANNER] heading "Required Courses for Computer Science Major", course list.
+      All twelve also appear in [SEQ]. The heading's CREDIT TOTAL is disputed
+      (65 there, 59 elsewhere) and is deliberately not encoded - only the course
+      list is, because both sources agree on it.
     note: >-
-      Uncontested. Every other COSC course in the catalog depends on this sequence,
-      directly or transitively, and all four official sources list these five.
+      [PLANNER]: "students must complete the courses listed below with grades of
+      'C' or higher".
 
-  - id: cs_capstone
-    name: Senior Project
+  - id: supporting_courses
+    name: Supporting Courses
     type: all_of
-    courses: [COSC490]
+    courses: [MATH241, MATH242, MATH312, MATH331, COSC201]
     min_grade: C
+    source: >-
+      [PLANNER] heading "Supporting Courses 11 credits". The 11 reconciles exactly
+      when starred MATH241 (4 cr) is counted under General Education instead:
+      4+3+3+1 = 11. That arithmetic confirms how the starred-course rule works.
+
+  - id: gen_ed_composition
+    name: General Education - English Composition
+    type: n_of
+    n: 2
+    courses: [ENGL101, ENGL111, ENGL102, ENGL112]
+    source: >-
+      [GENED] category "EC (English Composition) - 6 credits", Part A
+      (ENGL 101 or ENGL 111) and Part B (ENGL 102 or ENGL 112). [PLANNER] lists
+      the same four with the same OR structure.
+    note: >-
+      n_of cannot express "one from Part A AND one from Part B" - a student taking
+      ENGL101 and ENGL111 would satisfy this block but not the requirement. Needs
+      two separate blocks once the schema supports paired OR-groups.
     advisor_approval_required: true
-    note: >-
-      COSC490 has no course prerequisite. It is gated on Department Chair permission
-      and senior standing, which the schema cannot express, so the engine must defer
-      to a human rather than report this as automatically satisfiable.
+
+  - id: first_year_seminar
+    name: University First-Year Seminar
+    type: all_of
+    courses: [UNIV101]
+    source: >-
+      [PLANNER] "UNIV 101 - University First-Year Seminar, 1 credits", listed under
+      General Education and University Requirements. [SEQ] places it in First Year,
+      Semester One. ORNS 106 appears in NEITHER source.
 
   - id: cumulative_gpa
     name: Minimum Cumulative GPA
     type: gpa
     min_gpa: 2.0
     scope: cumulative
+    source: '[PLANNER] "Cumulative average of 2.0 or better"'
 
   - id: major_gpa
     name: Minimum Major GPA
     type: gpa
     min_gpa: 2.0
     scope: major
+    source: >-
+      [PLANNER] "a major average of 2.0 or better" and "No outstanding grades
+      below 'C' in the major".
 
-  # NOT YET ENCODED - each blocked on an open question:
-  #   major course groups A/B/C  -> Q1 (59 vs 65 credits), Q2 (Group C 3 vs 4)
-  #   general education          -> Q3 (40 vs 44 credits)
-  #   residency                  -> Q4 (all upper-div major vs two-thirds)
-  #   orientation                -> Q5 (ORNS 106 vs UNIV 101 vs both)
-  #   COSC462 eligibility        -> Q6 (prerequisite COSC 459 does not exist)
+  # NOT ENCODED - [PLANNER] and [SEQ] give different course lists AND different
+  # counts for every elective group. See docs/catalog-open-questions.md Q7/Q8.
+  #   Group A  - [PLANNER] 2 courses / [SEQ] 3 slots; membership differs
+  #   Group B  - [PLANNER] 3 courses / [SEQ] 2 slots; membership differs
+  #   Group C  - [PLANNER] header says four (4), its own footnote says three (3)
+  #   Group D  - appears in [SEQ] only; absent from [PLANNER] entirely
+  #   Natural Science Complementary Studies (6 cr) - "any 20-499 course in SCMNS",
+  #     which needs the SCMNS course inventory this file does not have.

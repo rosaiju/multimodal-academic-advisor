@@ -35,6 +35,7 @@ An expired API key cannot break the core demo.
 | Phase | Scope | State |
 |---|---|---|
 | 0 | Repo, config, catalog schema + loader, `AuditResult` contract | **Done** |
+| 0.5 | Requirements explorer: `explain.py`, catalog router, `doctor` CLI | **Done** |
 | 1 | Audit engine, matcher, prereq DAG, dashboard, chat with tools | Not started |
 | 2 | Transcript upload, vision extraction, voice, planner, wellbeing | Not started |
 | 3 | What-if simulation, multi-term planning, optional extras | Not started |
@@ -43,8 +44,7 @@ Full plan, team split, and roadmap: [`docs/`](docs/) and the project plan docume
 
 ## Quick start
 
-Requires Python 3.11–3.13. (3.14 works for the core, but several ingestion
-dependencies still lag — pin 3.12 or 3.13 for the team.)
+Requires Python 3.11–3.14.
 
 ```bash
 cd backend
@@ -60,6 +60,33 @@ uvicorn app.main:app --reload
 
 Then open <http://localhost:8000/docs> for the auto-generated API explorer, or
 <http://localhost:8000/health> to confirm the catalog loaded.
+
+## Inspecting a catalog
+
+`doctor` validates a catalog file and prints it in plain English. Use it while
+encoding requirements — "the server starts" is a weak signal that a 200-line YAML
+file is correct.
+
+```bash
+cd backend
+python -m app.catalog.doctor ../data/catalog/demo_university_cs.yaml
+python -m app.catalog.doctor ../data/catalog --strict          # warnings fail, for CI
+python -m app.catalog.doctor ../data/catalog/demo_university_cs.yaml --course COSC490
+```
+
+It exits non-zero on a dangling course reference, and warns about orphan courses,
+over-constrained degrees, and prerequisite cycles.
+
+The same data is served read-only over HTTP:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /catalog/{program_id}/requirements` | Every block, stated in plain English |
+| `GET /catalog/{program_id}/courses?subject=COSC` | Courses, optionally by subject |
+| `GET /catalog/{program_id}/courses/{code}/prerequisites` | Prerequisite tree and depth |
+
+These describe *requirements only*. Whether a given student has met them is the
+audit engine's job, and it does not exist yet.
 
 ## Layout
 

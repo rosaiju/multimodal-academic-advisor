@@ -57,6 +57,13 @@ class Course(BaseModel):
     )
     min_prereq_grade: str = "D"
     terms_offered: list[Term] = Field(default_factory=lambda: [Term.FALL, Term.SPRING])
+    offered_as_needed: bool = Field(
+        default=False,
+        description="Catalog lists the course as 'AS NEEDED' - it runs irregularly and "
+        "may skip years. terms_offered then means 'when it runs, it runs in these "
+        "terms', NOT 'it runs every one of these terms'. A planner must not schedule "
+        "a student's only path to graduation through one of these without a warning.",
+    )
 
     @property
     def subject(self) -> str:

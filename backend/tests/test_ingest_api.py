@@ -287,3 +287,17 @@ class TestExtractorInterface:
         result = extract_transcript(b"\xff\xfe\x00bad", filename="t.txt")
         assert result.courses == []
         assert result.warnings
+
+
+class TestHealthReportsCapability:
+    """A 415 on upload should never be the first time anyone learns scans are off."""
+
+    def test_lists_available_extractors(self, client) -> None:
+        body = client.get("/health").json()
+        assert "text-parser" in body["transcript_extractors"]
+        assert "pdf-text-parser" in body["transcript_extractors"]
+
+    def test_reports_scanned_support_as_off_without_a_provider(self, client) -> None:
+        body = client.get("/health").json()
+        assert body["accepts_scanned_transcripts"] is False
+        assert body["llm_configured"] is False

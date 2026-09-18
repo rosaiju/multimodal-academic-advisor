@@ -68,12 +68,20 @@ app.add_middleware(
 @app.get("/health", tags=["system"])
 def health() -> dict[str, object]:
     settings = get_settings()
+    from app.ingestion.extractor import registered_extractors
+
+    extractors = registered_extractors()
     return {
         "status": "ok",
         "catalog_loaded": registry.is_loaded,
         "programs": [p.program_id for p in registry.list_programs()],
         "llm_provider": settings.llm_provider,
         "llm_configured": settings.llm_configured,
+        # Which transcript formats actually work right now. Without a configured
+        # provider the vision reader is absent and scans cannot be processed,
+        # which is worth surfacing rather than discovering on a 415.
+        "transcript_extractors": extractors,
+        "accepts_scanned_transcripts": any(e.startswith("vision:") for e in extractors),
     }
 
 

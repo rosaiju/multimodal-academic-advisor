@@ -84,9 +84,11 @@ class TestRefusesToOverreport:
         assert "PARTIAL" in coverage.summary
         assert "absent, not failed" in coverage.summary
 
-    def test_unimplemented_strategy_raises_rather_than_silently_degrading(self, morgan) -> None:
-        with pytest.raises(NotImplementedError, match="not implemented yet"):
-            run_audit(morgan, record(), strategy=MatcherStrategy.OPTIMAL_BIPARTITE)
+    def test_both_strategies_are_implemented(self, morgan) -> None:
+        """Both run. Their divergence is covered in tests/test_optimal_matcher.py."""
+        for strategy in (MatcherStrategy.GREEDY, MatcherStrategy.OPTIMAL_BIPARTITE):
+            result = run_audit(morgan, record(("COSC111", "A", 4)), strategy=strategy)
+            assert result.strategy is strategy
 
     def test_residency_needs_an_advisor_when_the_record_is_silent(self, demo) -> None:
         """Assuming courses were taken in residence would pass a transfer student."""

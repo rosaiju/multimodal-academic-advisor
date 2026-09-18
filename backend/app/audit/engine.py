@@ -33,6 +33,7 @@ from app.audit.evaluators import (
     evaluate_residency,
     gpa_points,
 )
+from app.audit.optimal import SLOT_BLOCKS, assign_optimally
 from app.audit.record import StudentRecord
 from app.catalog.schema import (
     AllOfBlock,
@@ -114,15 +115,26 @@ def run_audit(
     concentration later in the list. `demo_university_cs.yaml` is built to exhibit
     exactly that, and OPTIMAL_BIPARTITE (not yet implemented) is the fix.
     """
-    if strategy is not MatcherStrategy.GREEDY:
-        raise NotImplementedError(
-            f"strategy {strategy.value!r} is not implemented yet. Only GREEDY is "
-            "available; see docs/icebox.md."
-        )
-
     completed = list(record.completed)
     available = list(range(len(completed)))
     blocks: list[RequirementBlockResult] = []
+
+    # OPTIMAL decides every slot-based assignment up front, so no block can spend a
+    # course a later block needed. GREEDY leaves the dict empty and each block takes
+    # what it can from what is left, in catalog order.
+    preassigned: dict[str, list[int]] = (
+        assign_optimally(program, completed)
+        if strategy is MatcherStrategy.OPTIMAL_BIPARTITE
+        else {}
+    )
+
+    # Course CODES already applied somewhere. A retake is two transcript rows but
+    # one course as far as the degree is concerned, so consuming one row must put
+    # the other out of reach of every later block - under either strategy.
+    used_codes: set[str] = set()
+
+    def _free() -> list[int]:
+        return [i for i in available if completed[i].code not in used_codes]
 
     for block in program.requirement_blocks:
         if isinstance(block, _RECORD_SCOPED):
@@ -131,11 +143,21 @@ def run_audit(
             blocks.append(result)
             continue
 
-        sub_pool = [completed[i] for i in available]
-        result, consumed = _evaluate(program, block, sub_pool)
-        blocks.append(result)
+        if strategy is MatcherStrategy.OPTIMAL_BIPARTITE and isinstance(block, SLOT_BLOCKS):
+            # Hand the evaluator exactly what the global matching allotted, and let
+            # it render status and still_needed the same way it always does.
+            free = set(_free())
+            indices = [i for i in preassigned.get(block.id, []) if i in free]
+            result, consumed = _evaluate(program, block, [completed[i] for i in indices])
+            blocks.append(result)
+            taken = {indices[i] for i in consumed}
+        else:
+            pool_indices = _free()
+            result, consumed = _evaluate(program, block, [completed[i] for i in pool_indices])
+            blocks.append(result)
+            taken = {pool_indices[i] for i in consumed}
 
-        taken = {available[i] for i in consumed}
+        used_codes.update(completed[i].code for i in taken)
         available = [i for i in available if i not in taken]
 
     applied_courses = [a for b in blocks for a in b.applied]
@@ -148,7 +170,9 @@ def run_audit(
     unapplied = [
         applied_course(program, completed[i])
         for i in available
-        if completed[i].is_trusted and program.course(completed[i].code) is not None
+        if completed[i].is_trusted
+        and program.course(completed[i].code) is not None
+        and completed[i].code not in used_codes
     ]
 
     return AuditResult(

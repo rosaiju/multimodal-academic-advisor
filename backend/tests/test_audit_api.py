@@ -203,3 +203,72 @@ class TestErrors:
     def test_unsafe_student_id_does_not_escape_the_store(self, client) -> None:
         response = client.get("/students/..%2Fescape/audit")
         assert response.status_code in (400, 404)
+
+
+class TestPlanEndpoint:
+    """GET /students/{id}/plan - the advising view."""
+
+    def test_returns_completed_gaps_and_recommendations(self, client) -> None:
+        enrol(client)
+        body = client.get("/students/jane/plan").json()
+        assert {c["code"] for c in body["completed"]} == {
+            "COSC111",
+            "COSC112",
+            "ENGL101",
+            "ENGL102",
+            "UNIV101",
+        }
+        assert body["gaps"]
+        assert body["recommended"]
+
+    def test_recommends_something_the_student_can_actually_take(self, client) -> None:
+        enrol(client)
+        body = client.get("/students/jane/plan").json()
+        assert all(r["eligible_now"] for r in body["recommended"])
+        assert all(r["missing_prerequisites"] == [] for r in body["recommended"])
+
+    def test_top_recommendation_is_justified(self, client) -> None:
+        enrol(client)
+        top = client.get("/students/jane/plan").json()["recommended"][0]
+        assert top["course"]["code"] == "COSC220"
+        assert top["serves"]
+        assert any("required by" in r for r in top["reasons"])
+        assert top["provenance"] == "verified"
+
+    def test_blocked_courses_are_listed_separately_with_reasons(self, client) -> None:
+        enrol(client)
+        body = client.get("/students/jane/plan").json()
+        assert body["blocked"]
+        for entry in body["blocked"]:
+            assert entry["eligible_now"] is False
+            assert entry["missing_prerequisites"]
+
+    def test_plan_carries_the_coverage_caveat(self, client) -> None:
+        enrol(client)
+        body = client.get("/students/jane/plan").json()
+        assert "PARTIAL" in body["coverage"]
+        assert body["caveats"]
+
+    def test_only_confirmed_coursework_shapes_the_plan(self, client) -> None:
+        """Unconfirmed rows must not make a student look eligible for anything."""
+        enrol(client, only={"COSC111"})
+        body = client.get("/students/jane/plan").json()
+        assert {c["code"] for c in body["completed"]} == {"COSC111"}
+        suggested = {r["course"]["code"] for r in body["recommended"]}
+        assert "COSC220" not in suggested, "COSC112 was never confirmed"
+
+    def test_limit_is_applied(self, client) -> None:
+        enrol(client)
+        body = client.get("/students/jane/plan", params={"limit": 2}).json()
+        assert len(body["recommended"]) <= 2
+
+    def test_limit_is_validated(self, client) -> None:
+        enrol(client)
+        assert client.get("/students/jane/plan", params={"limit": 0}).status_code == 422
+
+    def test_unknown_student_is_404(self, client) -> None:
+        assert client.get("/students/nobody/plan").status_code == 404
+
+    def test_missing_program_is_400(self, client) -> None:
+        enrol(client, program=None)
+        assert client.get("/students/jane/plan").status_code == 400

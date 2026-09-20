@@ -59,6 +59,12 @@ class ExtractedCourse(BaseModel):
     transfer: bool = Field(
         default=False, description="Row came from transfer credit at another institution"
     )
+    source_reference: str | None = Field(
+        default=None,
+        description="The document's own 'Satisfied by' text, verbatim. What makes two "
+        "rows sharing a block-transfer code (COSC116TR) different courses rather than "
+        "one repeated course - their code, term, grade and credits can all match.",
+    )
     confidence: Confidence = Confidence.LOW
     issues: list[str] = Field(
         default_factory=list,

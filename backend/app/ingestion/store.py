@@ -58,6 +58,30 @@ class StoredRecord(BaseModel):
         return [c for c in self.confirmed if c.was_corrected]
 
 
+def _identity(entry: ConfirmedCourse) -> tuple[object, ...]:
+    """What makes two confirmed rows the same row rather than two separate courses.
+
+    `source_reference` is in here because a block-transfer bucket can produce two
+    rows identical in every other field - same code, term, grade, credits, even the
+    same raw line - that are nonetheless two different transfer courses. Without it
+    one of them is dropped on save.
+    """
+    course = entry.course
+    return (
+        course.code,
+        course.term,
+        course.grade,
+        course.credits,
+        entry.source_reference,
+    )
+
+
+def _identity_sort_key(entry: ConfirmedCourse) -> tuple[str, str, str]:
+    """Stable order for the stored file: by code, then term, then grade."""
+    course = entry.course
+    return (course.code, course.term or "", course.grade or "")
+
+
 def _validate_id(student_id: str) -> str:
     if not student_id or not set(student_id) <= _SAFE_ID:
         raise StoredRecordError(
@@ -123,23 +147,27 @@ class RecordStore:
         *,
         program_id: str | None = None,
     ) -> StoredRecord:
-        """Append confirmed coursework, replacing any earlier row for the same code.
+        """Append confirmed coursework, replacing any earlier row identical to it.
 
         Replacing rather than appending duplicates means a re-uploaded transcript
-        does not double a student's coursework. A genuine retake is two rows with
-        the same code in ONE upload, and the audit engine already counts it once.
+        does not double a student's coursework.
+
+        Identity is the whole row - see `_identity` - not the code alone. A
+        DegreeWorks block-transfer bucket such as COSC116TR stands for many distinct
+        transfer courses, and keying on the code kept only the last one, quietly
+        deleting the others' credit on save.
         """
         existing = self.load(student_id) if self.exists(student_id) else None
-        merged: dict[str, ConfirmedCourse] = {}
+        merged: dict[tuple[object, ...], ConfirmedCourse] = {}
         if existing is not None:
-            merged = {c.course.code: c for c in existing.confirmed}
+            merged = {_identity(c): c for c in existing.confirmed}
         for entry in courses:
-            merged[entry.course.code] = entry
+            merged[_identity(entry)] = entry
 
         record = StoredRecord(
             student_id=student_id,
             program_id=program_id or (existing.program_id if existing else None),
-            confirmed=sorted(merged.values(), key=lambda c: c.course.code),
+            confirmed=sorted(merged.values(), key=_identity_sort_key),
         )
         self.save(record)
         return record

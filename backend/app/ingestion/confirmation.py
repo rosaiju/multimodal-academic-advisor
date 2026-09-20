@@ -46,6 +46,12 @@ class ConfirmedCourse(BaseModel):
     source_name: str = Field(description="Which document this came from")
     extractor: str
     raw_line: str = Field(description="The transcript line, kept for disputes")
+    source_reference: str | None = Field(
+        default=None,
+        description="The document's 'Satisfied by' text. Two block-transfer rows can "
+        "share a code, term, grade, credits AND raw line; this is the only thing that "
+        "tells them apart, so the record keeps it.",
+    )
     corrections: list[Correction] = Field(default_factory=list)
 
     @property
@@ -120,6 +126,7 @@ def confirm_course(
         source_name=result.source_name,
         extractor=result.extractor,
         raw_line=extracted.raw_line,
+        source_reference=extracted.source_reference,
         corrections=corrections,
     )
 

@@ -252,3 +252,107 @@ class TestEndToEnd:
         record = StoredRecord(student_id="jane").to_student_record()
         result = run_audit(morgan, record)
         assert result.total_credits_applied == Decimal(0)
+
+
+class TestBlockTransferSurvivesTheStore:
+    """Regression: the store re-collapsed what the parser had just separated.
+
+    A DegreeWorks block-transfer bucket such as COSC116TR is one code standing for
+    many distinct transfer courses. `add_courses` keyed its merge on the code alone,
+    so saving fourteen of them kept the last and silently deleted the rest of the
+    credit - after the parser had correctly told them apart.
+
+    All coursework below is invented.
+    """
+
+    AUDIT = """\
+Degree Works Audit
+Free Electives
+COSC 116TR COSC LWR LVL ELECTIVE  TRA  0.5  FALL 2021
+Satisfied by: XXX006 - INTRO TO INFO TECH - EXAMPLE EVALUATION SERVICE
+COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  SPRING 2022
+Satisfied by: XXX007 - C PROGRAMMING - EXAMPLE EVALUATION SERVICE
+COSC 116TR COSC LWR LVL ELECTIVE  TRC  3    SUMMER 2022
+Satisfied by: XXX020 - NUMERICAL METHOD - EXAMPLE EVALUATION SERVICE
+"""
+
+    @pytest.fixture
+    def buckets(self, morgan):
+        from app.ingestion.degreeworks import parse_degreeworks_text
+
+        return parse_degreeworks_text(self.AUDIT, source_name="audit.pdf", program=morgan)
+
+    def test_every_bucket_row_is_stored(self, tmp_path, buckets) -> None:
+        store = RecordStore(tmp_path)
+        record = store.add_courses("jane", [confirm_course(c, buckets) for c in buckets.courses])
+        assert len(record.confirmed) == 3
+
+    def test_no_credit_is_lost_on_save(self, tmp_path, buckets) -> None:
+        store = RecordStore(tmp_path)
+        store.add_courses("jane", [confirm_course(c, buckets) for c in buckets.courses])
+        reloaded = store.load("jane")
+        assert sum(c.course.credits for c in reloaded.confirmed) == Decimal("4.0")
+
+    def test_reupload_still_replaces_rather_than_duplicates(self, tmp_path, buckets) -> None:
+        """Widening the key must not reintroduce the doubling it was guarding."""
+        store = RecordStore(tmp_path)
+        rows = [confirm_course(c, buckets) for c in buckets.courses]
+        store.add_courses("jane", rows)
+        record = store.add_courses("jane", rows)
+        assert len(record.confirmed) == 3
+        assert sum(c.course.credits for c in record.confirmed) == Decimal("4.0")
+
+    def test_a_retake_with_a_new_grade_does_not_erase_the_original(
+        self, tmp_path, extraction
+    ) -> None:
+        """Two sittings are two rows. The engine decides which one counts."""
+        store = RecordStore(tmp_path)
+        first = confirm_course(row(extraction, "COSC111"), extraction)
+        store.add_courses("jane", [first])
+        retake = confirm_course(row(extraction, "COSC111"), extraction, grade="C")
+        record = store.add_courses("jane", [retake])
+        assert len(record.confirmed) == 2
+        assert {c.course.grade for c in record.confirmed} == {"A", "C"}
+
+    def test_rows_alike_in_every_field_but_their_source_both_survive(
+        self, tmp_path, morgan
+    ) -> None:
+        """The hardest case, and the one the real audit actually contains.
+
+        Two practicals taken in the same term, equated to the same grade, worth the
+        same half credit, printed on identical lines. Code, term, grade, credits and
+        raw line all match; only the sending course differs. Without carrying that
+        reference through confirmation, one of them is deleted on save.
+        """
+        from app.ingestion.degreeworks import parse_degreeworks_text
+
+        audit = (
+            "Degree Works Audit\n"
+            "COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  SUMMER 2022\n"
+            "Satisfied by: XXX015 - DISCRETE STRUCTURE - EXAMPLE EVALUATION SERVICE\n"
+            "COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  SUMMER 2022\n"
+            "Satisfied by: XXX016 - OBJECT ORIENTED PROG - EXAMPLE EVALUATION SERVICE\n"
+        )
+        extraction = parse_degreeworks_text(audit, source_name="audit.pdf", program=morgan)
+        assert len(extraction.courses) == 2
+        assert len({c.raw_line for c in extraction.courses}) == 1, "the lines are identical"
+
+        store = RecordStore(tmp_path)
+        record = store.add_courses(
+            "jane", [confirm_course(c, extraction) for c in extraction.courses]
+        )
+        assert len(record.confirmed) == 2
+        assert sum(c.course.credits for c in record.confirmed) == Decimal("1.0")
+
+    def test_the_source_reference_reaches_the_stored_file(self, tmp_path, buckets) -> None:
+        """It is provenance, not just a dedup key: a dispute needs to see it."""
+        store = RecordStore(tmp_path)
+        store.add_courses("jane", [confirm_course(c, buckets) for c in buckets.courses])
+        stored = store.load("jane")
+        assert all("EXAMPLE EVALUATION SERVICE" in c.source_reference for c in stored.confirmed)
+
+    def test_an_ordinary_transcript_row_has_no_source_reference(self, tmp_path, extraction) -> None:
+        """A plain transcript has no 'Satisfied by' line, and must not grow one."""
+        store = RecordStore(tmp_path)
+        store.add_courses("jane", [confirm_course(row(extraction, "COSC111"), extraction)])
+        assert store.load("jane").confirmed[0].source_reference is None

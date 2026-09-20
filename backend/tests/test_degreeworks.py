@@ -344,3 +344,207 @@ class TestDetectionRequiresRowEvidence:
         cv = "I have used DegreeWorks and Banner extensively.\n"
         result = parse_document_text(cv, source_name="cv.txt")
         assert result.extractor == "text-parser"
+
+
+class TestBlockTransferBuckets:
+    """Regression: every lower-level transfer row was dropped, then re-collapsed.
+
+    An audit parks transfer credit that equates to no single Morgan course in a
+    BUCKET - "COSC 116TR COSC LWR LVL ELECTIVE". Two separate bugs hid them:
+
+    * `_ROW` required a bare three-digit number, so the TR suffix matched nothing
+      and the rows were never seen at all.
+    * Keying the result on the course code alone then treated a dozen distinct
+      transfer courses as one repeated course and kept only the first.
+
+    Together those silently deleted most of a transfer student's credit. All
+    coursework below is invented.
+    """
+
+    BUCKETS = """\
+Degree Works Audit
+Free Electives
+Course Title Grade Credits Term Repeated
+COSC 116TR COSC LWR LVL ELECTIVE  TRA  0.5  FALL 2021
+Satisfied by: XXX006 - INTRO TO INFO TECH (PRACTICAL) - EXAMPLE EVALUATION SERVICE
+COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  FALL 2021
+Satisfied by: XXX007 - C PROGRAMMING (PRACTICAL) - EXAMPLE EVALUATION SERVICE
+COSC 116TR COSC LWR LVL ELECTIVE  TRC  3    SPRING 2022
+Satisfied by: XXX020 - NUMERICAL METHOD (THEORY) - EXAMPLE EVALUATION SERVICE
+MATH 116TR MATH LWR LVL ELECTIVE  TRB  3    SPRING 2022
+Satisfied by: XXX022 - STATISTICS II (THEORY) - EXAMPLE EVALUATION SERVICE
+"""
+
+    @pytest.fixture
+    def parsed(self, morgan):
+        return parse_degreeworks_text(self.BUCKETS, source_name="audit.pdf", program=morgan)
+
+    def test_the_tr_suffix_no_longer_hides_the_row(self, parsed) -> None:
+        assert {c.code for c in parsed.courses} == {"COSC116TR", "MATH116TR"}
+
+    def test_every_bucket_row_survives(self, parsed) -> None:
+        """Four rows in, four rows out - not two, one per distinct code."""
+        assert len(parsed.courses) == 4
+
+    def test_no_credit_is_lost(self, parsed) -> None:
+        assert sum(c.credits for c in parsed.courses) == Decimal("7.0")
+
+    def test_rows_sharing_a_code_keep_their_own_fields(self, parsed) -> None:
+        cosc = [c for c in parsed.courses if c.code == "COSC116TR"]
+        assert len(cosc) == 3
+        assert {c.grade for c in cosc} == {"A", "B", "C"}
+        assert {str(c.credits) for c in cosc} == {"0.5", "3"}
+
+    def test_nothing_is_reported_as_a_repeat(self, parsed) -> None:
+        """These are distinct courses. Calling them repeats is the bug."""
+        assert not any("repeated a course" in w for w in parsed.warnings)
+
+    def test_a_bucket_is_explained_not_called_a_bad_code(self, parsed) -> None:
+        """'COSC116TR is not in the catalog' invites a student to correct it."""
+        bucket = next(c for c in parsed.courses if c.code == "COSC116TR")
+        assert any("block transfer credit" in i for i in bucket.issues)
+        assert not any("not in the catalog" in i for i in bucket.issues)
+
+    def test_buckets_are_never_high_confidence(self, parsed) -> None:
+        assert all(c.confidence is not Confidence.HIGH for c in parsed.courses)
+
+    def test_an_identical_row_is_still_a_repeat(self, morgan) -> None:
+        """Widening the key must not stop collapsing genuine duplicates."""
+        text = (
+            "Degree Works Audit\n"
+            "Req One  COSC 116TR COSC LWR LVL ELECTIVE  TRA  0.5  FALL 2021\n"
+            "Satisfied by: XXX006 - INTRO TO INFO TECH - EXAMPLE EVALUATION SERVICE\n"
+            "Req Two  COSC 116TR COSC LWR LVL ELECTIVE  TRA  0.5  FALL 2021\n"
+            "Satisfied by: XXX006 - INTRO TO INFO TECH - EXAMPLE EVALUATION SERVICE\n"
+        )
+        result = parse_degreeworks_text(text, source_name="a.pdf", program=morgan)
+        assert len(result.courses) == 1
+        assert any("repeated a course" in w for w in result.warnings)
+
+    def test_same_code_and_term_but_a_different_source_is_two_courses(self, morgan) -> None:
+        """Two practicals taken in one term differ ONLY by their sending course."""
+        text = (
+            "Degree Works Audit\n"
+            "COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  SUMMER 2022\n"
+            "Satisfied by: XXX015 - DISCRETE STRUCTURE - EXAMPLE EVALUATION SERVICE\n"
+            "COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  SUMMER 2022\n"
+            "Satisfied by: XXX016 - OBJECT ORIENTED PROG - EXAMPLE EVALUATION SERVICE\n"
+        )
+        result = parse_degreeworks_text(text, source_name="a.pdf", program=morgan)
+        assert len(result.courses) == 2
+        assert sum(c.credits for c in result.courses) == Decimal("1.0")
+
+    def test_an_ordinary_course_does_not_acquire_a_suffix(self, morgan) -> None:
+        """The suffix is optional; a normal code must not pick one up."""
+        result = parse_degreeworks_text(WORKSHEET, source_name="a.pdf", program=morgan)
+        assert {c.code for c in result.courses} == {
+            "ENGL101",
+            "COSC111",
+            "MATH241",
+            "ART101",
+            "PHIL109",
+            "COSC220",
+            "ORTR101",
+        }
+
+
+class TestWinterMiniMester:
+    """Regression: a wrapped 'WINTER MINI-MESTER' term lost the whole row.
+
+    The year is what anchors the row regex, and DegreeWorks wraps it onto the
+    following line when the term name is long. The row matched nothing and vanished.
+    """
+
+    WRAPPED = """\
+Degree Works Audit
+Free Electives
+COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  WINTER MINI-MESTER
+2023
+Satisfied by: XXX026 - COMPUTER ARCH (PRACTICAL) - EXAMPLE EVALUATION SERVICE
+MATH 241 CALCULUS I  A  4  SPRING 2024
+"""
+
+    @pytest.fixture
+    def parsed(self, morgan):
+        return parse_degreeworks_text(self.WRAPPED, source_name="audit.pdf", program=morgan)
+
+    def test_the_row_is_found_at_all(self, parsed) -> None:
+        assert "COSC116TR" in {c.code for c in parsed.courses}
+
+    def test_the_wrapped_year_is_reattached(self, parsed) -> None:
+        bucket = next(c for c in parsed.courses if c.code == "COSC116TR")
+        assert bucket.term == "Winter Mini-Mester 2023"
+
+    def test_the_stray_year_is_not_a_row_of_its_own(self, parsed) -> None:
+        assert len(parsed.courses) == 2
+
+    def test_line_number_points_at_the_row_not_the_year(self, parsed) -> None:
+        """A student checking the source needs the line the row starts on."""
+        bucket = next(c for c in parsed.courses if c.code == "COSC116TR")
+        source = self.WRAPPED.splitlines()[bucket.line_number - 1]
+        assert source.startswith("COSC 116TR")
+
+    def test_an_unwrapped_term_still_reads(self, parsed) -> None:
+        assert next(c for c in parsed.courses if c.code == "MATH241").term == "Spring 2024"
+
+    def test_mini_mester_on_one_line_also_works(self, morgan) -> None:
+        text = (
+            "Degree Works Audit\n"
+            "Req  COSC 116TR COSC LWR LVL ELECTIVE  TRB  0.5  WINTER MINI-MESTER 2023\n"
+            "Req  MATH 241 CALCULUS I  A  4  SPRING 2024\n"
+            "Req  ENGL 101 COMPOSITION  A  3  FALL 2024\n"
+        )
+        result = parse_degreeworks_text(text, source_name="a.pdf", program=morgan)
+        bucket = next(c for c in result.courses if c.code == "COSC116TR")
+        assert bucket.term == "Winter Mini-Mester 2023"
+
+
+class TestWrappedSatisfiedBy:
+    """Regression: most transfer rows came back with no sending institution.
+
+    A narrow PDF column strands the label on a line of its own, with its value
+    split above and below it. The old reader looked at exactly the next line and
+    required text after the colon, so it found neither half.
+    """
+
+    WRAPPED = """\
+Degree Works Audit
+Social and Behavioral Sciences  ECON 211 PRIN OF ECONOMICS I (SB)  TRA  3  FALL 2024
+ECO201 - THE AMERICAN ECONOMY - EXAMPLE COMMUNITY
+Satisfied by:
+COLLEGE
+Arts and Humanities are required from 2 disciplines, only 1 foreign language can apply.
+Mathematics (MQ)  MATH 241 CALCULUS I  TRB  3.5  FALL 2021
+Example University  Doe, Jane - *****123
+XXX004 - MATHEMATICS I - EXAMPLE EVALUATION
+Satisfied by:
+SERVICE
+"""
+
+    @pytest.fixture
+    def parsed(self, morgan):
+        return parse_degreeworks_text(self.WRAPPED, source_name="audit.pdf", program=morgan)
+
+    def test_a_label_on_its_own_line_is_read(self, parsed) -> None:
+        assert by_code(parsed)["ECON211"].institution == "EXAMPLE COMMUNITY COLLEGE"
+
+    def test_a_page_header_between_row_and_source_is_skipped(self, parsed) -> None:
+        """The repeated header sits between many rows and their source line."""
+        assert by_code(parsed)["MATH241"].institution == "EXAMPLE EVALUATION SERVICE"
+
+    def test_the_following_section_is_not_swallowed(self, parsed) -> None:
+        """Sweeping every nearby line pulled captions into the institution field."""
+        for course in parsed.courses:
+            assert course.institution is None or "foreign language" not in course.institution
+
+    def test_a_masked_student_id_never_becomes_an_institution(self, parsed) -> None:
+        """The page header carries a masked id. It is not a college."""
+        for course in parsed.courses:
+            assert course.institution is None or "*****" not in course.institution
+
+    def test_an_inline_satisfied_by_is_unchanged(self) -> None:
+        result = parse_degreeworks_text(WORKSHEET, source_name="a.pdf")
+        assert by_code(result)["MATH241"].institution == "EXAMPLE COMMUNITY COLLEGE"
+
+    def test_a_bare_label_is_never_read_as_a_course(self, parsed) -> None:
+        assert all(c.raw_line.strip() != "Satisfied by:" for c in parsed.courses)

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from app.audit.engine import run_audit
+from app.audit.planning import build_plan
 from app.audit.record import CompletedCourse, StudentRecord
 from app.catalog.loader import load_program
 from app.catalog.schema import Program
@@ -269,9 +270,22 @@ class TestResultShape:
         assert result.critical_path_terms is None
         assert result.critical_path == []
 
-    def test_percent_complete_is_against_the_full_degree(self, morgan) -> None:
+    def test_percent_complete_is_withheld_on_a_partial_catalog(self, morgan) -> None:
+        """It used to divide block-scoped credit by the whole degree's credits.
+
+        Morgan's catalog is deliberately incomplete, so no honest degree percentage
+        exists. None forces a caller to say so instead of printing a number that
+        reads as completion.
+        """
         result = run_audit(morgan, record(("COSC111", "A", 4), ("ENGL101", "A", 3)))
-        assert 0 < result.percent_complete < 10
+        assert result.coverage is not None and not result.coverage.is_complete
+        assert result.percent_complete is None
+
+    def test_credit_progress_is_reported_even_when_percent_is_not(self, morgan) -> None:
+        """Earned against required needs no requirement blocks to be meaningful."""
+        result = run_audit(morgan, record(("COSC111", "A", 4), ("ENGL101", "A", 3)))
+        assert result.total_credits_earned == Decimal(7)
+        assert 0 < result.credit_progress_percent < 10
 
     def test_empty_record_produces_a_clean_unmet_audit(self, morgan) -> None:
         result = run_audit(morgan, record())
@@ -279,3 +293,284 @@ class TestResultShape:
         assert result.unapplied == []
         course_blocks = [b for b in result.blocks if b.courses_required]
         assert all(b.status is BlockStatus.UNMET for b in course_blocks)
+
+
+class TestCreditAccountingSeparatesThreeQuantities:
+    """Regression: a student holding 150 credits was shown 54.
+
+    `total_credits_applied` counts only what the matcher placed into an ENCODED
+    requirement block. On a deliberately partial catalog that is a small fraction
+    of a real record, and it was being presented as the student's credit total and
+    divided by the whole degree to make a completion percentage.
+
+    Three quantities, three names:
+      earned   - trusted passing credit on the record, catalog or not
+      applied  - credit that landed in an encoded block
+      outside  - confirmed credit the catalog has no entry for
+
+    All coursework below is invented.
+    """
+
+    def _record(self):
+        """Two catalog courses and two the catalog has never heard of."""
+        return StudentRecord(
+            student_id="s",
+            completed=[
+                CompletedCourse(
+                    code="COSC111",
+                    term="Fall 2024",
+                    grade="A",
+                    credits=Decimal(4),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                ),
+                CompletedCourse(
+                    code="ENGL101",
+                    term="Fall 2024",
+                    grade="A",
+                    credits=Decimal(3),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                ),
+                CompletedCourse(
+                    code="PSYC101",
+                    term="Fall 2023",
+                    grade="A",
+                    credits=Decimal(3),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                    institution="EXAMPLE COMMUNITY COLLEGE",
+                ),
+                CompletedCourse(
+                    code="COSC116TR",
+                    term="Fall 2023",
+                    grade="B",
+                    credits=Decimal(3),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                    institution="EXAMPLE EVALUATION SERVICE",
+                ),
+            ],
+        )
+
+    def test_earned_counts_credit_the_catalog_does_not_know(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        assert result.total_credits_earned == Decimal(13)
+
+    def test_applied_stays_scoped_to_encoded_blocks(self, morgan) -> None:
+        """Unchanged meaning - it is the LABEL that was wrong, not this number."""
+        result = run_audit(morgan, self._record())
+        assert result.total_credits_applied < result.total_credits_earned
+
+    def test_outside_catalog_courses_are_reported_not_dropped(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        codes = {c.code for c in result.outside_catalog}
+        assert codes == {"PSYC101", "COSC116TR"}
+        assert sum(c.credits for c in result.outside_catalog) == Decimal(6)
+
+    def test_outside_catalog_keeps_the_sending_institution(self, morgan) -> None:
+        """Residency questions need it, and it is the only provenance these have."""
+        result = run_audit(morgan, self._record())
+        psyc = next(c for c in result.outside_catalog if c.code == "PSYC101")
+        assert psyc.institution == "EXAMPLE COMMUNITY COLLEGE"
+
+    def test_outside_catalog_credit_is_never_applied_to_a_requirement(self, morgan) -> None:
+        """Reported, never counted toward a block. That decision is an evaluator's."""
+        result = run_audit(morgan, self._record())
+        applied = {a.course.code for b in result.blocks for a in b.applied}
+        assert applied.isdisjoint({"PSYC101", "COSC116TR"})
+
+    def test_the_three_buckets_do_not_overlap(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        applied = {a.course.code for b in result.blocks for a in b.applied}
+        unapplied = {a.course.code for a in result.unapplied}
+        outside = {c.code for c in result.outside_catalog}
+        assert applied.isdisjoint(unapplied)
+        assert applied.isdisjoint(outside)
+        assert unapplied.isdisjoint(outside)
+
+    def test_unconfirmed_credit_is_not_earned(self, morgan) -> None:
+        """The provenance gate holds here too."""
+        record = StudentRecord(
+            student_id="s",
+            completed=[
+                CompletedCourse(
+                    code="PSYC101",
+                    term="Fall 2023",
+                    grade="A",
+                    credits=Decimal(3),
+                    provenance=Provenance.UNVERIFIED_EXTRACTION,
+                )
+            ],
+        )
+        result = run_audit(morgan, record)
+        assert result.total_credits_earned == Decimal(0)
+        assert result.outside_catalog == []
+
+
+class TestInProgressCreditIsCountedSeparately:
+    """Regression: `total_credits_in_progress` was hardcoded to zero.
+
+    The field existed and always lied, so a student sitting on twelve credits saw
+    none of them anywhere on the dashboard.
+    """
+
+    def _record(self):
+        return StudentRecord(
+            student_id="s",
+            completed=[
+                CompletedCourse(
+                    code="COSC111",
+                    term="Fall 2024",
+                    grade="A",
+                    credits=Decimal(4),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                ),
+                CompletedCourse(
+                    code="COSC490",
+                    term="Fall 2026",
+                    grade="IP",
+                    credits=Decimal(3),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                ),
+            ],
+        )
+
+    def test_in_progress_credit_is_reported(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        assert result.total_credits_in_progress == Decimal(3)
+
+    def test_in_progress_credit_is_not_earned_credit(self, morgan) -> None:
+        """The safeguard. Attempted is not earned."""
+        result = run_audit(morgan, self._record())
+        assert result.total_credits_earned == Decimal(4)
+
+    def test_in_progress_credit_satisfies_nothing(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        applied = {a.course.code for b in result.blocks for a in b.applied}
+        assert "COSC490" not in applied
+
+
+class TestNoDegreePercentageOnAPartialCatalog:
+    """Regression: "45% complete" shown to a student with 150 of 120 credits.
+
+    The fraction mixed scopes - credit applied to six encoded blocks over the whole
+    degree's 120 credits. No repair of that fraction is honest while requirements
+    are missing, so the number is withheld entirely.
+    """
+
+    def _record(self):
+        return StudentRecord(
+            student_id="s",
+            completed=[
+                CompletedCourse(
+                    code="COSC111",
+                    term="Fall 2024",
+                    grade="A",
+                    credits=Decimal(4),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                )
+            ],
+        )
+
+    def test_percent_complete_is_none(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        assert result.coverage is not None and not result.coverage.is_complete
+        assert result.percent_complete is None
+
+    def test_credit_progress_is_still_reported(self, morgan) -> None:
+        """It needs no requirement blocks - both sides are facts we hold."""
+        result = run_audit(morgan, self._record())
+        assert result.credit_progress_percent > 0
+
+    def test_credit_progress_may_exceed_one_hundred(self, morgan) -> None:
+        """A transfer student can hold more credit than the degree requires."""
+        record = StudentRecord(
+            student_id="s",
+            completed=[
+                CompletedCourse(
+                    code=f"XXXX{i:03d}",
+                    term="Fall 2023",
+                    grade="A",
+                    credits=Decimal(10),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                )
+                for i in range(15)
+            ],
+        )
+        result = run_audit(morgan, record)
+        assert result.total_credits_earned == Decimal(150)
+        assert result.credit_progress_percent > 100
+
+    def test_encoded_requirements_percent_is_scoped_to_encoded_blocks(self, morgan) -> None:
+        result = run_audit(morgan, self._record())
+        satisfied = sum(1 for b in result.blocks if b.is_complete)
+        assert result.encoded_requirements_percent == pytest.approx(
+            satisfied / len(result.blocks) * 100
+        )
+
+    def test_graduation_still_fails_closed(self, morgan) -> None:
+        """Untouched by any of this - an incomplete catalog never says yes."""
+        result = run_audit(morgan, self._record())
+        assert result.is_graduation_eligible is False
+
+
+class TestNothingUnderWayIsRecommended:
+    """Regression: the plan suggested courses the student was sitting in.
+
+    Recommendations filtered on `passed`, and an in-progress grade is non-passing,
+    so a course being taken right now looked exactly like one never attempted.
+    Both states disqualify a course from advice, for opposite reasons.
+    """
+
+    def _record(self):
+        return StudentRecord(
+            student_id="s",
+            completed=[
+                CompletedCourse(
+                    code="COSC490",
+                    term="Fall 2026",
+                    grade="IP",
+                    credits=Decimal(3),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                ),
+                CompletedCourse(
+                    code="COSC111",
+                    term="Fall 2024",
+                    grade="A",
+                    credits=Decimal(4),
+                    provenance=Provenance.STUDENT_CONFIRMED,
+                ),
+            ],
+        )
+
+    def _plan(self, morgan):
+        record = self._record()
+        return build_plan(morgan, record, run_audit(morgan, record))
+
+    def test_an_in_progress_course_is_not_recommended(self, morgan) -> None:
+        plan = self._plan(morgan)
+        assert "COSC490" not in {r.course.code for r in plan.recommended}
+
+    def test_it_is_not_in_the_blocked_list_either(self, morgan) -> None:
+        """Blocked means "prerequisites missing", which is a different story."""
+        plan = self._plan(morgan)
+        assert "COSC490" not in {r.course.code for r in plan.blocked}
+
+    def test_it_is_surfaced_as_under_way(self, morgan) -> None:
+        plan = self._plan(morgan)
+        assert "COSC490" in {c.code for c in plan.under_way}
+
+    def test_a_caveat_explains_the_omission(self, morgan) -> None:
+        plan = self._plan(morgan)
+        assert any("in progress" in c for c in plan.caveats)
+
+    def test_in_progress_does_not_unlock_a_prerequisite(self, morgan) -> None:
+        """The safeguard that must survive: sitting in a course is not passing it.
+
+        If in-progress had been folded into `passed` to stop the recommendation,
+        it would also have made the student look eligible for everything downstream.
+        """
+        from app.audit.prereq_graph import passed_courses
+
+        assert "COSC490" not in passed_courses(morgan, self._record().completed)
+
+    def test_a_passed_course_is_still_not_recommended(self, morgan) -> None:
+        plan = self._plan(morgan)
+        assert "COSC111" not in {r.course.code for r in plan.recommended}

@@ -39,7 +39,12 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from app.catalog.schema import Program
-from app.ingestion.models import Confidence, ExtractedCourse, ExtractionResult
+from app.ingestion.models import (
+    IN_PROGRESS_GRADES,
+    Confidence,
+    ExtractedCourse,
+    ExtractionResult,
+)
 
 EXTRACTOR_NAME = "degreeworks-parser"
 
@@ -86,7 +91,9 @@ _STILL_NEEDED = re.compile(r"still needed:", re.IGNORECASE)
 _TRANSFER = re.compile(r"^TR([A-F])?$")
 
 #: In progress / registered. Credits appear parenthesised because none are earned.
-_IN_PROGRESS = frozenset({"IP", "REG", "INC"})
+#: Shared with the models layer so `ExtractedCourse.in_progress` and this parser
+#: cannot drift apart about what counts as unfinished.
+_IN_PROGRESS = IN_PROGRESS_GRADES
 
 #: How far past a row to look for its "Satisfied by" source. The PDF text layer
 #: splits that field across up to four lines when the column is narrow.

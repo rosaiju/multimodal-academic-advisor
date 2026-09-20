@@ -145,10 +145,30 @@ class TestSummary:
         )
         assert total == 6, "Morgan has six encoded blocks"
 
-    def test_percent_is_against_the_whole_degree(self, client) -> None:
+    def test_no_degree_percentage_is_offered_on_a_partial_catalog(self, client) -> None:
+        """The dashboard bug: 45% shown to a student holding 150 credits.
+
+        The old number divided credit applied to encoded blocks by the credits the
+        whole degree requires - two different scopes in one fraction.
+        """
         enrol(client)
         summary = client.get("/students/jane/audit/summary").json()
-        assert 0 < summary["percent_complete"] < 20
+        assert summary["percent_complete"] is None
+        assert summary["progress_is_partial"] is True
+
+    def test_the_summary_separates_earned_from_applied(self, client) -> None:
+        enrol(client)
+        summary = client.get("/students/jane/audit/summary").json()
+        for field in (
+            "credits_earned",
+            "credits_applied",
+            "credits_in_progress",
+            "credits_outside_catalog",
+            "credit_progress_percent",
+            "encoded_requirements_percent",
+        ):
+            assert field in summary, f"{field} missing from the summary"
+        assert float(summary["credits_earned"]) >= float(summary["credits_applied"])
 
 
 class TestStrategy:

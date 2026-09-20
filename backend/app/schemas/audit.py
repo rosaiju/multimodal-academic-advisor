@@ -50,6 +50,26 @@ class AppliedCourse(BaseModel):
     provenance: Provenance
 
 
+class UnrecognisedCourse(BaseModel):
+    """Confirmed coursework the catalog has no entry for.
+
+    Transfer credit dominates this list: a student who arrives with 88 hours from
+    another institution carries courses that Morgan's catalog never names. They are
+    real credit on a real record, and leaving them out of the accounting is how a
+    dashboard comes to show 54 credits to someone holding 150.
+
+    They are reported, never applied. Deciding that an outside course satisfies a
+    requirement is an evaluator's job, not a parser's.
+    """
+
+    code: str
+    term: str
+    grade: str
+    credits: Decimal
+    institution: str | None = None
+    provenance: Provenance
+
+
 class RequirementBlockResult(BaseModel):
     block_id: str
     name: str
@@ -147,14 +167,30 @@ class AuditResult(BaseModel):
     catalog_year: str
 
     total_credits_required: Decimal
+
+    #: Credit the matcher placed into an ENCODED requirement block. Scoped to what
+    #: the catalog currently describes, so it is NOT a measure of what a student
+    #: has done - on a partial catalog it is far smaller.
     total_credits_applied: Decimal
+
+    #: All trusted, passing credit on the record, whether or not the catalog names
+    #: the course. This is the student's own total, and the number that should be
+    #: compared against total_credits_required.
+    total_credits_earned: Decimal = Decimal(0)
+
+    #: Trusted credit currently being attempted. Counts toward nothing yet.
     total_credits_in_progress: Decimal
 
     gpa: GpaSummary
     blocks: list[RequirementBlockResult]
 
-    #: Completed courses the matcher could not apply to any requirement.
+    #: Completed courses the catalog KNOWS but no block claimed.
     unapplied: list[AppliedCourse] = Field(default_factory=list)
+
+    #: Confirmed coursework the catalog has no entry for at all - mostly transfer
+    #: credit. Previously dropped on the floor, which made the credit totals
+    #: irreconcilable with the student's own audit.
+    outside_catalog: list[UnrecognisedCourse] = Field(default_factory=list)
 
     #: Longest remaining prerequisite chain, in terms. Computed from the DAG,
     #: not estimated. This is the honest answer to "can I still graduate on time?"
@@ -170,10 +206,55 @@ class AuditResult(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def percent_complete(self) -> float:
+    def percent_complete(self) -> float | None:
+        """How far through the DEGREE the student is, or None when unknowable.
+
+        This used to divide credit applied to encoded blocks by the credits the
+        whole degree requires. The numerator was scoped to the handful of blocks
+        the catalog describes and the denominator to all 120 credits, so the two
+        did not belong in the same fraction: a student holding 150 credits, 138 of
+        them passing, was shown "45% complete" because only 54 had landed in an
+        encoded block.
+
+        There is no honest degree percentage while requirements are missing from
+        the catalog, so this returns None rather than a number that reads as one.
+        `credit_progress_percent` and `encoded_requirements_percent` are each well
+        defined and are what a caller should show instead.
+        """
+        if self.coverage is not None and not self.coverage.is_complete:
+            return None
+        if self.total_credits_required == 0:
+            return None
+        return float(self.total_credits_applied / self.total_credits_required * 100)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def credit_progress_percent(self) -> float:
+        """Credit EARNED against credit required. Uncapped, and may exceed 100.
+
+        Always meaningful: both sides come from the student's own record and the
+        catalog's headline total, neither of which depends on how many requirement
+        blocks have been encoded. It answers "have I done enough credit?", which is
+        not the same question as "have I done the right credit?".
+        """
         if self.total_credits_required == 0:
             return 0.0
-        return float(self.total_credits_applied / self.total_credits_required * 100)
+        return float(self.total_credits_earned / self.total_credits_required * 100)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def encoded_requirements_percent(self) -> float:
+        """Satisfied blocks as a share of the blocks that ARE encoded.
+
+        Honest within its scope and useless outside it: with six blocks encoded out
+        of a real degree's many, three satisfied is 50% of what we have modelled and
+        says nothing about the degree. Callers must show it beside the coverage
+        caveat, never alone.
+        """
+        if not self.blocks:
+            return 0.0
+        satisfied = sum(1 for b in self.blocks if b.is_complete)
+        return float(satisfied / len(self.blocks) * 100)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

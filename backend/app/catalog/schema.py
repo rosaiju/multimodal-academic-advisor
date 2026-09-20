@@ -21,6 +21,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 GRADE_ORDER: list[str] = ["A", "B", "C", "D"]
 #: Grades that appear on a transcript but never satisfy a requirement.
 NON_PASSING = frozenset({"F", "W", "I", "IP", "NP", "AU"})
+#: The subset of NON_PASSING meaning "registered, not finished yet".
+#:
+#: A distinct idea from failing. An in-progress course satisfies nothing and
+#: unlocks no prerequisite, but a student IS sitting in it, so it must not be
+#: recommended to them either. It lives here beside NON_PASSING so ingestion and
+#: the audit engine share one answer instead of keeping private copies.
+IN_PROGRESS_GRADES = frozenset({"IP", "REG", "INC"})
 
 
 def grade_meets(earned: str, minimum: str) -> bool:

@@ -35,7 +35,7 @@ from app.audit.prereq_graph import (
     unmet_prerequisites,
 )
 from app.audit.record import StudentRecord
-from app.catalog.schema import Program
+from app.catalog.schema import IN_PROGRESS_GRADES, Program
 from app.schemas.audit import AuditResult, BlockStatus, CourseRef
 from app.schemas.provenance import Provenance
 
@@ -91,6 +91,11 @@ class AdvisingPlan(BaseModel):
         default_factory=list,
         description="Would count, but prerequisites are not met yet.",
     )
+    under_way: list[CourseRef] = Field(
+        default_factory=list,
+        description="Confirmed as in progress right now. Not recommended - the "
+        "student is already sitting in them - and not yet counted either.",
+    )
 
     #: Carried from the audit. Advice off a partial catalog is partial advice.
     coverage: str | None = None
@@ -131,6 +136,16 @@ def build_plan(
     """
     passed = passed_courses(program, record.completed)
 
+    # Courses the student is SITTING IN. Deliberately separate from `passed`:
+    # an unfinished course must not satisfy a prerequisite, but recommending one a
+    # student is already enrolled in is equally wrong advice. Filtering only on
+    # `passed` did exactly that, because an IP grade is non-passing.
+    in_progress_codes = {
+        c.code
+        for c in record.completed
+        if c.is_trusted and c.grade.strip().upper() in IN_PROGRESS_GRADES
+    }
+
     completed_refs = [a.course for b in audit.blocks for a in b.applied]
     completed_credits = sum((r.credits for r in completed_refs), Decimal(0))
 
@@ -145,7 +160,7 @@ def build_plan(
     serves: dict[str, list[str]] = {}
     for block in unfinished:
         for ref in block.still_needed:
-            if ref.code in passed:
+            if ref.code in passed or ref.code in in_progress_codes:
                 continue
             serves.setdefault(ref.code, []).append(block.block_id)
 
@@ -209,7 +224,25 @@ def build_plan(
     recommended.sort(key=rank)
     blocked.sort(key=rank)
 
+    under_way = [
+        CourseRef(
+            code=course.code,
+            subject=course.subject,
+            number=course.number,
+            title=course.title,
+            credits=course.credits,
+        )
+        for code in sorted(in_progress_codes)
+        if (course := program.course(code)) is not None
+    ]
+
     caveats: list[str] = []
+    if under_way:
+        caveats.append(
+            f"{len(under_way)} course(s) are in progress and are left out of the "
+            "recommendations below. They are not counted as done either - they "
+            "satisfy nothing until a final grade lands."
+        )
     if audit.coverage is not None and not audit.coverage.is_complete:
         caveats.append(
             "This plan covers only the requirements currently encoded in the catalog. "
@@ -228,6 +261,7 @@ def build_plan(
         catalog_year=program.catalog_year,
         completed=sorted(completed_refs, key=lambda r: r.code),
         completed_credits=completed_credits,
+        under_way=sorted(under_way, key=lambda r: r.code),
         gaps=gaps,
         recommended=recommended[:limit],
         blocked=blocked[:limit],

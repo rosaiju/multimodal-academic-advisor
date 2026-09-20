@@ -75,20 +75,37 @@ export default function Dashboard({ studentId, onAddMore, onReset }) {
         }
       >
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-          <ProgressRing percent={summary.percent_complete} />
+          {/*
+            The ring measures CREDIT EARNED against credit the degree requires, and
+            its caption says exactly that. It is deliberately not a degree-completion
+            figure: while requirements are missing from the catalog there is no honest
+            one, and the backend returns null rather than a number that reads as one.
+
+            A full ring here means "you have earned the credit hours", which is a
+            necessary and very much not sufficient condition for graduating.
+          */}
+          <ProgressRing
+            percent={summary.credit_progress_percent}
+            caption={`${summary.credits_earned} of ${summary.credits_required} required credits earned`}
+            detail={
+              summary.progress_is_partial
+                ? 'Credit hours only — not degree completion'
+                : undefined
+            }
+          />
 
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">Degree progress</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Credit progress</h2>
             <p className="text-sm text-slate-500">
               {summary.program_id} · catalog {summary.catalog_year}
             </p>
 
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                ['Credits applied', `${summary.credits_applied} / ${summary.credits_required}`],
-                ['Requirements met', summary.satisfied],
-                ['In progress', summary.in_progress],
-                ['Not started', summary.unmet],
+                ['Credits earned', `${summary.credits_earned} / ${summary.credits_required}`],
+                ['In progress', `${summary.credits_in_progress} cr`],
+                ['Applied to encoded requirements', `${summary.credits_applied} cr`],
+                ['Not in our catalog', `${summary.credits_outside_catalog} cr`],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
                   <div className="text-lg font-semibold tabular-nums text-slate-900">{value}</div>
@@ -97,11 +114,42 @@ export default function Dashboard({ studentId, onAddMore, onReset }) {
               ))}
             </div>
 
-            <div className="mt-4">
-              <Alert tone="warning" title="This audit is partial">
-                {summary.coverage}
-              </Alert>
-            </div>
+            {summary.progress_is_partial && (
+              <div className="mt-4">
+                <Alert tone="warning" title="We cannot tell you how complete your degree is">
+                  <p>
+                    Our catalog encodes only part of this degree, so there is no honest
+                    percentage to show. <strong>Do not read the figures above as degree
+                    completion.</strong> They describe credit on your record, not requirements met.
+                  </p>
+                  <p className="mt-2">
+                    Of the requirements we have encoded,{' '}
+                    <strong>
+                      {summary.satisfied} of{' '}
+                      {summary.satisfied +
+                        summary.in_progress +
+                        summary.unmet +
+                        summary.needs_advisor}
+                    </strong>{' '}
+                    are satisfied ({summary.encoded_requirements_percent}%) — a share of what we
+                    model, not of your degree.
+                  </p>
+                  <p className="mt-2 text-xs">{summary.coverage}</p>
+                  <p className="mt-2 text-xs">
+                    Your official DegreeWorks audit remains the authority. Check it, and your
+                    advisor, before making registration decisions.
+                  </p>
+                </Alert>
+              </div>
+            )}
+
+            {Number(summary.credits_outside_catalog) > 0 && (
+              <p className="mt-3 text-xs text-slate-500">
+                {summary.credits_outside_catalog} credits on your record are courses our catalog
+                does not list — mostly transfer work. They are counted in your credits earned, but
+                we cannot say which requirements they satisfy; only the registrar can.
+              </p>
+            )}
           </div>
         </div>
       </Card>
@@ -113,6 +161,30 @@ export default function Dashboard({ studentId, onAddMore, onReset }) {
           subtitle="Courses you can take now, ordered by how much they unblock"
           className="lg:col-span-2"
         >
+          {plan.under_way?.length > 0 && (
+            <div className="mb-4 rounded-lg bg-sky-50 px-4 py-3 ring-1 ring-inset ring-sky-600/20">
+              <div className="text-sm font-medium text-sky-900">
+                Already under way — not recommended below
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {plan.under_way.map((course) => (
+                  <span
+                    key={course.code}
+                    title={course.title}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm text-sky-900 ring-1 ring-inset ring-sky-600/20"
+                  >
+                    <span className="font-medium">{course.code}</span>
+                    <span className="text-sky-700/70">{course.credits} cr</span>
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-sky-800">
+                You are enrolled in these now, so they are left out of the suggestions. They do not
+                count toward a requirement until a final grade lands.
+              </p>
+            </div>
+          )}
+
           {plan.recommended.length === 0 ? (
             <EmptyState>Nothing to recommend yet — confirm some coursework first.</EmptyState>
           ) : (

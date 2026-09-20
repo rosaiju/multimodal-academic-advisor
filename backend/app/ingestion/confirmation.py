@@ -78,6 +78,17 @@ def confirm_course(
     one keeps the extracted value - and if that value is missing, this raises
     rather than inventing a default, because a guessed grade decides a degree.
     """
+    if extracted.is_placeholder:
+        # Checked against the EXTRACTED row, not the corrected one, and deliberately
+        # so. A summary line stays a summary line however it is edited: typing a
+        # grade into "TRANSFER OF 24 CREDITS" does not make it a course, it makes
+        # those 24 credits count twice - once here and once as the rows below it.
+        raise ConfirmationError(
+            f"{extracted.code}: this row is a summary line, not a course - it carries "
+            "no grade and no credit hours, and the credit it totals is listed "
+            "separately. It cannot be confirmed, only left out."
+        )
+
     corrections: list[Correction] = []
     for name, supplied, original in (
         ("term", term, extracted.term),

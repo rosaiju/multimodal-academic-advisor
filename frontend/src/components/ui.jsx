@@ -128,39 +128,60 @@ export function Alert({ tone = 'info', title, children }) {
 }
 
 /** Circular progress. Percent is against the WHOLE degree, not encoded blocks. */
-export function ProgressRing({ percent, size = 132 }) {
+/**
+ * A ring showing progress toward ONE named quantity.
+ *
+ * `caption` is required and has no default on purpose. This used to read
+ * "complete" whatever it was measuring, so a student who had earned more credit
+ * than the degree requires saw a full circle over the word "complete" and read it
+ * as a finished degree. What the ring measures has to be said next to the number.
+ *
+ * `percent` may exceed 100: the arc caps, the printed figure does not, because
+ * rounding 115% down to 100% is the same lie in smaller type.
+ */
+export function ProgressRing({ percent, caption, detail, size = 132 }) {
   const stroke = 11
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const clamped = Math.max(0, Math.min(100, percent))
+  const shown = Math.max(0, percent)
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={stroke}
-          className="fill-none stroke-slate-200"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - clamped / 100)}
-          className="fill-none stroke-slate-900 transition-[stroke-dashoffset] duration-700"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-semibold tabular-nums text-slate-900">
-          {clamped.toFixed(1)}%
-        </span>
-        <span className="text-xs text-slate-500">complete</span>
+    <figure className="m-0 flex w-full max-w-60 flex-col items-center gap-2 sm:w-auto">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeWidth={stroke}
+            className="fill-none stroke-slate-200"
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - clamped / 100)}
+            className="fill-none stroke-slate-900 transition-[stroke-dashoffset] duration-700"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
+          <span className="text-2xl font-semibold tabular-nums text-slate-900">
+            {shown.toFixed(0)}%
+          </span>
+          {/* Inside the ring there is room for two short words at phone width. */}
+          <span className="text-[0.65rem] font-medium uppercase leading-tight tracking-wide text-slate-500">
+            of credits
+          </span>
+        </div>
       </div>
-    </div>
+      <figcaption className="text-balance text-center text-xs leading-snug text-slate-600">
+        <span className="font-medium text-slate-900">{caption}</span>
+        {detail && <span className="mt-0.5 block text-slate-500">{detail}</span>}
+      </figcaption>
+    </figure>
   )
 }
 
@@ -175,4 +196,36 @@ export function Spinner({ label = 'Loading…' }) {
 
 export function EmptyState({ children }) {
   return <p className="py-6 text-center text-sm text-slate-500">{children}</p>
+}
+
+const ROW_STATUS = {
+  in_progress: {
+    label: 'In progress',
+    className: 'bg-sky-50 text-sky-700 ring-sky-600/20',
+  },
+  placeholder: {
+    label: 'Not a course',
+    className: 'bg-slate-100 text-slate-600 ring-slate-500/20',
+  },
+  needs_field: {
+    label: 'Needs a field',
+    className: 'bg-rose-50 text-rose-700 ring-rose-600/20',
+  },
+  transfer: {
+    label: 'Transfer',
+    className: 'bg-violet-50 text-violet-700 ring-violet-600/20',
+  },
+}
+
+/** A small marker for what KIND of row this is, beside the confidence badge. */
+export function RowStatusBadge({ value }) {
+  const meta = ROW_STATUS[value]
+  if (!meta) return null
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${meta.className}`}
+    >
+      {meta.label}
+    </span>
+  )
 }

@@ -254,3 +254,93 @@ class TestEndToEndThroughPdf:
         assert result.extractor == "degreeworks-parser"
         assert len(result.courses) == 7
         assert all(c.provenance is Provenance.UNVERIFIED_EXTRACTION for c in result.courses)
+
+
+class TestWarningCountsMatchTheList:
+    """Regression: warnings counted rows SCANNED, the table showed rows KEPT.
+
+    A duplicated in-progress course was counted twice in the warning but appears
+    once in the table, so the two disagreed. A warning that contradicts the list
+    beside it makes a student doubt both numbers.
+    """
+
+    WORKSHEET_WITH_REPEATS = """\
+Degree Works Audit
+Requirement One    PHIL 109 CRITICAL THINKING   IP   (3)  SPRING 2026
+Requirement Two    PHIL 109 CRITICAL THINKING   IP   (3)  SPRING 2026
+Requirement Three  MATH 241 CALCULUS I          TRB  3.5  FALL 2023
+Requirement Four   MATH 241 CALCULUS I          TRB  3.5  FALL 2023
+Requirement Five   ENGL 101 COMPOSITION I       A    3    FALL 2024
+"""
+
+    def _parsed(self):
+        return parse_degreeworks_text(self.WORKSHEET_WITH_REPEATS, source_name="a.pdf")
+
+    def test_in_progress_warning_counts_kept_rows_only(self) -> None:
+        result = self._parsed()
+        actual = sum(1 for c in result.courses if c.grade == "IP")
+        assert actual == 1
+        assert any(f"{actual} course(s) are still in progress" in w for w in result.warnings)
+
+    def test_transfer_warning_counts_kept_rows_only(self) -> None:
+        result = self._parsed()
+        actual = sum(1 for c in result.courses if c.transfer)
+        assert actual == 1
+        assert any(f"{actual} course(s) came from transfer" in w for w in result.warnings)
+
+    def test_course_count_matches_distinct_codes(self) -> None:
+        result = self._parsed()
+        assert len(result.courses) == 3
+        assert len({c.code for c in result.courses}) == 3
+
+    def test_duplicate_warning_counts_dropped_rows(self) -> None:
+        result = self._parsed()
+        assert any("2 row(s) repeated" in w for w in result.warnings)
+
+    def test_transfer_flag_is_structural_not_text_matched(self) -> None:
+        """`transfer` is set by the parser, so counting never depends on wording."""
+        result = self._parsed()
+        math = next(c for c in result.courses if c.code == "MATH241")
+        engl = next(c for c in result.courses if c.code == "ENGL101")
+        assert math.transfer is True
+        assert engl.transfer is False
+
+
+class TestDetectionRequiresRowEvidence:
+    """Regression: a document merely MENTIONING DegreeWorks was routed here.
+
+    A CV describing this very project contains the word, which sent the whole
+    document to the audit parser and then failed it as unreadable - a confusing
+    way to tell someone they uploaded the wrong file.
+    """
+
+    def test_keyword_alone_is_not_enough(self) -> None:
+        cv = (
+            "Rohan Example — Curriculum Vitae\n"
+            "Projects\n"
+            "Built a multimodal academic advisor that parses DegreeWorks audits.\n"
+            "Skills: Python, FastAPI, React\n"
+        )
+        assert not looks_like_degreeworks(cv)
+
+    def test_empty_document_is_not_degreeworks(self) -> None:
+        assert not looks_like_degreeworks("")
+
+    def test_one_row_plus_a_marker_is_enough(self) -> None:
+        text = "Degree Works Audit\nRequirement  ENGL 101 COMPOSITION  A  3  FALL 2024\n"
+        assert looks_like_degreeworks(text)
+
+    def test_three_rows_alone_is_enough(self) -> None:
+        text = "\n".join(
+            [
+                "Req A  ENGL 101 COMPOSITION  A  3  FALL 2024",
+                "Req B  MATH 241 CALCULUS I   B  4  FALL 2024",
+                "Req C  COSC 111 INTRO CS     A  4  FALL 2024",
+            ]
+        )
+        assert looks_like_degreeworks(text)
+
+    def test_a_cv_mentioning_degreeworks_routes_to_the_transcript_parser(self) -> None:
+        cv = "I have used DegreeWorks and Banner extensively.\n"
+        result = parse_document_text(cv, source_name="cv.txt")
+        assert result.extractor == "text-parser"

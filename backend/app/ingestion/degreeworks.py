@@ -64,12 +64,20 @@ _IN_PROGRESS = frozenset({"IP", "REG", "INC"})
 
 
 def looks_like_degreeworks(text: str) -> bool:
-    """True when this document is an audit worksheet rather than a transcript."""
+    """True when this document is an audit worksheet rather than a transcript.
+
+    Detection requires actual ROW EVIDENCE, never a keyword alone. A CV that
+    mentions DegreeWorks in a project description would otherwise be routed here
+    and then fail as unreadable, which is a confusing way to tell someone they
+    uploaded the wrong file.
+    """
+    rows = sum(1 for line in text.splitlines() if _ROW.search(line.strip()))
+    if rows == 0:
+        return False
     lowered = text.lower()
-    if sum(marker in lowered for marker in _MARKERS) >= 1:
-        return True
-    # Fall back on shape: several rows ending in GRADE CREDITS TERM YEAR.
-    return sum(1 for line in text.splitlines() if _ROW.search(line.strip())) >= 3
+    has_marker = any(marker in lowered for marker in _MARKERS)
+    # One row plus a worksheet marker, or several rows on shape alone.
+    return rows >= 3 or (rows >= 1 and has_marker)
 
 
 def _clean_title(raw: str) -> str | None:
@@ -102,8 +110,6 @@ def parse_degreeworks_text(
     found: dict[str, ExtractedCourse] = {}
     duplicates: list[str] = []
     warnings: list[str] = []
-    in_progress_count = 0
-    transfer_count = 0
 
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -125,7 +131,6 @@ def parse_degreeworks_text(
         # Transfer credit: the grade carries the equated letter, or none at all.
         transfer = _TRANSFER.match(raw_grade)
         if transfer:
-            transfer_count += 1
             grade = transfer.group(1)
             if grade is None:
                 issues.append(
@@ -140,7 +145,6 @@ def parse_degreeworks_text(
                 if nxt:
                     institution = _institution_from(nxt.group("detail"))
         elif raw_grade in _IN_PROGRESS:
-            in_progress_count += 1
             grade = raw_grade
             issues.append(
                 "currently in progress - this has no final grade yet and will not "
@@ -187,6 +191,7 @@ def parse_degreeworks_text(
             credits=credits,
             title=_clean_title(row.group("title")),
             institution=institution,
+            transfer=bool(transfer),
             confidence=confidence,
             issues=issues,
             raw_line=stripped,
@@ -194,6 +199,12 @@ def parse_degreeworks_text(
         )
 
     courses = list(found.values())
+
+    # Counted from the FINAL list, not from rows scanned. A duplicated row was
+    # already counted once, and a warning that disagrees with the table beside it
+    # makes a student doubt both numbers.
+    in_progress_count = sum(1 for c in courses if c.grade in _IN_PROGRESS)
+    transfer_count = sum(1 for c in courses if c.is_transfer)
 
     if duplicates:
         warnings.append(

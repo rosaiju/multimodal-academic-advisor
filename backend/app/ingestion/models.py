@@ -56,6 +56,9 @@ class ExtractedCourse(BaseModel):
         description="Where the course was taken, when the document says. Feeds the "
         "residency requirement, which is NEEDS_ADVISOR without it.",
     )
+    transfer: bool = Field(
+        default=False, description="Row came from transfer credit at another institution"
+    )
     confidence: Confidence = Confidence.LOW
     issues: list[str] = Field(
         default_factory=list,
@@ -66,6 +69,15 @@ class ExtractedCourse(BaseModel):
 
     #: Fixed. An extraction is never anything else, whatever produced it.
     provenance: Provenance = Provenance.UNVERIFIED_EXTRACTION
+
+    @property
+    def is_transfer(self) -> bool:
+        """True when this row came from another institution.
+
+        Set by the extractor rather than inferred from text, so counting transfer
+        rows does not depend on matching issue wording.
+        """
+        return self.transfer
 
     @property
     def is_complete(self) -> bool:

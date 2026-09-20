@@ -34,7 +34,7 @@ import { confirmCourses } from '../api'
  * the other sixty-two. There is still deliberately no "accept everything" button,
  * matching the backend, which has no bulk-accept helper for the same reason.
  */
-export default function ReviewStep({ extraction, studentId, programId, onConfirmed, onBack }) {
+export default function ReviewStep({ extraction, programId, onConfirmed, onBack }) {
   const rows = extraction.extraction.courses
   const [edits, setEdits] = useState({})
   const [busy, setBusy] = useState(false)
@@ -108,7 +108,6 @@ export default function ReviewStep({ extraction, studentId, programId, onConfirm
         return item
       })
       await confirmCourses({
-        studentId,
         programId,
         sourceName: extraction.extraction.source_name,
         extractor: extraction.extraction.extractor,

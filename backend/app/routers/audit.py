@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.audit.engine import run_audit
 from app.audit.planning import AdvisingPlan, build_plan
+from app.auth.dependencies import AuthorisedStudentId
 from app.catalog.loader import CatalogError
 from app.catalog.registry import registry
 from app.catalog.schema import Program
@@ -82,7 +83,7 @@ class AuditSummary(BaseModel):
 
 @router.get("/students/{student_id}/audit", response_model=AuditResult)
 def get_audit(
-    student_id: str,
+    student_id: AuthorisedStudentId,
     program_id: Annotated[
         str | None, Query(description="Defaults to the program stored on the record.")
     ] = None,
@@ -121,7 +122,7 @@ def get_audit(
 
 @router.get("/students/{student_id}/audit/summary", response_model=AuditSummary)
 def get_audit_summary(
-    student_id: str,
+    student_id: AuthorisedStudentId,
     program_id: Annotated[str | None, Query()] = None,
     strategy: Annotated[MatcherStrategy, Query()] = MatcherStrategy.OPTIMAL_BIPARTITE,
 ) -> AuditSummary:
@@ -178,7 +179,8 @@ class StrategyComparison(BaseModel):
 
 @router.get("/students/{student_id}/audit/compare", response_model=StrategyComparison)
 def compare_strategies(
-    student_id: str, program_id: Annotated[str | None, Query()] = None
+    student_id: AuthorisedStudentId,
+    program_id: Annotated[str | None, Query()] = None,
 ) -> StrategyComparison:
     greedy = get_audit(student_id, program_id=program_id, strategy=MatcherStrategy.GREEDY)
     optimal = get_audit(
@@ -199,7 +201,7 @@ def compare_strategies(
 
 @router.get("/students/{student_id}/plan", response_model=AdvisingPlan)
 def get_plan(
-    student_id: str,
+    student_id: AuthorisedStudentId,
     program_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=30)] = 8,
 ) -> AdvisingPlan:

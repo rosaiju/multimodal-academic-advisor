@@ -11,11 +11,6 @@ boundary where a frontend will actually meet them:
 
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
-
-from app.config import get_settings
-
 PROGRAM = "morgan_cosc_bs_2026_2028"
 DEMO = "demo_cs_bs"
 
@@ -30,18 +25,7 @@ TRANSCRIPT = (
 )
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("STUDENT_RECORD_DIR", str(tmp_path))
-    get_settings.cache_clear()
-    from app.main import app
-
-    with TestClient(app) as c:
-        yield c
-    get_settings.cache_clear()
-
-
-def enrol(client, *, student_id="jane", program=PROGRAM, data=TRANSCRIPT, only=None):
+def enrol(client, *, program=PROGRAM, data=TRANSCRIPT, only=None):
     """Upload a transcript and confirm some or all of its rows."""
     upload = client.post(
         "/ingest/transcript",
@@ -54,7 +38,6 @@ def enrol(client, *, student_id="jane", program=PROGRAM, data=TRANSCRIPT, only=N
     client.post(
         "/ingest/confirm",
         json={
-            "student_id": student_id,
             "program_id": program,
             "source_name": "t.txt",
             "extractor": "text-parser",
@@ -67,7 +50,7 @@ def enrol(client, *, student_id="jane", program=PROGRAM, data=TRANSCRIPT, only=N
 class TestTheFullLoop:
     def test_upload_confirm_audit(self, client) -> None:
         enrol(client)
-        response = client.get("/students/jane/audit")
+        response = client.get("/students/{me}/audit")
         assert response.status_code == 200
         body = response.json()
         assert body["program_id"] == PROGRAM
@@ -77,7 +60,7 @@ class TestTheFullLoop:
     def test_only_confirmed_courses_count(self, client) -> None:
         """Confirm two of five rows; the other three must not appear."""
         enrol(client, only={"COSC111", "ENGL101"})
-        body = client.get("/students/jane/audit").json()
+        body = client.get("/students/{me}/audit").json()
         applied = {a["course"]["code"] for b in body["blocks"] for a in b["applied"]}
         assert applied == {"COSC111", "ENGL101"}
         assert float(body["total_credits_applied"]) == 7.0
@@ -92,14 +75,13 @@ class TestTheFullLoop:
         client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "program_id": PROGRAM,
                 "source_name": "t.txt",
                 "extractor": "text-parser",
                 "courses": [{"extracted": cosc111, "grade": "D"}],
             },
         )
-        body = client.get("/students/jane/audit").json()
+        body = client.get("/students/{me}/audit").json()
         # The major block needs C or better, so a corrected D must not apply.
         major = next(b for b in body["blocks"] if b["block_id"] == "major_required_courses")
         assert major["applied"] == []
@@ -108,11 +90,11 @@ class TestTheFullLoop:
 class TestRefusesToOverreport:
     def test_never_graduation_eligible_on_a_partial_catalog(self, client) -> None:
         enrol(client)
-        assert client.get("/students/jane/audit").json()["is_graduation_eligible"] is False
+        assert client.get("/students/{me}/audit").json()["is_graduation_eligible"] is False
 
     def test_summary_always_carries_the_coverage_caveat(self, client) -> None:
         enrol(client)
-        summary = client.get("/students/jane/audit/summary").json()
+        summary = client.get("/students/{me}/audit/summary").json()
         assert "PARTIAL" in summary["coverage"]
         assert "absent, not failed" in summary["coverage"]
         assert summary["graduation_eligible"] is False
@@ -124,11 +106,11 @@ class TestRefusesToOverreport:
         nothing", which is a different claim from "we have nothing from you".
         """
         enrol(client, only=set())
-        assert client.get("/students/jane/audit/summary").status_code == 404
+        assert client.get("/students/{me}/audit/summary").status_code == 404
 
     def test_a_single_confirmed_course_audits_cleanly(self, client) -> None:
         enrol(client, only={"COSC111"})
-        summary = client.get("/students/jane/audit/summary").json()
+        summary = client.get("/students/{me}/audit/summary").json()
         assert summary["credits_applied"] == "4"
         assert summary["graduation_eligible"] is False
 
@@ -136,7 +118,7 @@ class TestRefusesToOverreport:
 class TestSummary:
     def test_counts_every_block_status(self, client) -> None:
         enrol(client)
-        summary = client.get("/students/jane/audit/summary").json()
+        summary = client.get("/students/{me}/audit/summary").json()
         total = (
             summary["satisfied"]
             + summary["in_progress"]
@@ -152,13 +134,13 @@ class TestSummary:
         whole degree requires - two different scopes in one fraction.
         """
         enrol(client)
-        summary = client.get("/students/jane/audit/summary").json()
+        summary = client.get("/students/{me}/audit/summary").json()
         assert summary["percent_complete"] is None
         assert summary["progress_is_partial"] is True
 
     def test_the_summary_separates_earned_from_applied(self, client) -> None:
         enrol(client)
-        summary = client.get("/students/jane/audit/summary").json()
+        summary = client.get("/students/{me}/audit/summary").json()
         for field in (
             "credits_earned",
             "credits_applied",
@@ -176,22 +158,22 @@ class TestStrategy:
         """Greedy can under-report, and telling a student to retake something they
         have done is the worse error."""
         enrol(client)
-        body = client.get("/students/jane/audit").json()
+        body = client.get("/students/{me}/audit").json()
         assert body["strategy"] == "optimal_bipartite"
 
     def test_greedy_can_be_requested(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/audit", params={"strategy": "greedy"}).json()
+        body = client.get("/students/{me}/audit", params={"strategy": "greedy"}).json()
         assert body["strategy"] == "greedy"
 
     def test_invalid_strategy_is_rejected(self, client) -> None:
         enrol(client)
-        response = client.get("/students/jane/audit", params={"strategy": "vibes"})
+        response = client.get("/students/{me}/audit", params={"strategy": "vibes"})
         assert response.status_code == 422
 
     def test_compare_endpoint_reports_what_greedy_misses(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/audit/compare").json()
+        body = client.get("/students/{me}/audit/compare").json()
         assert set(body["only_with_optimal"]) == set(body["optimal_satisfied"]) - set(
             body["greedy_satisfied"]
         )
@@ -205,19 +187,19 @@ class TestErrors:
 
     def test_unknown_program_is_404(self, client) -> None:
         enrol(client)
-        response = client.get("/students/jane/audit", params={"program_id": "nope"})
+        response = client.get("/students/{me}/audit", params={"program_id": "nope"})
         assert response.status_code == 404
 
     def test_no_program_on_record_and_none_given_is_400(self, client) -> None:
         enrol(client, program=None)
-        response = client.get("/students/jane/audit")
+        response = client.get("/students/{me}/audit")
         assert response.status_code == 400
         assert "program_id" in response.json()["detail"]
 
     def test_program_override_is_honoured(self, client) -> None:
         """A student may ask what a different degree would say."""
         enrol(client)
-        body = client.get("/students/jane/audit", params={"program_id": DEMO}).json()
+        body = client.get("/students/{me}/audit", params={"program_id": DEMO}).json()
         assert body["program_id"] == DEMO
 
     def test_unsafe_student_id_does_not_escape_the_store(self, client) -> None:
@@ -230,7 +212,7 @@ class TestPlanEndpoint:
 
     def test_returns_completed_gaps_and_recommendations(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/plan").json()
+        body = client.get("/students/{me}/plan").json()
         assert {c["code"] for c in body["completed"]} == {
             "COSC111",
             "COSC112",
@@ -243,13 +225,13 @@ class TestPlanEndpoint:
 
     def test_recommends_something_the_student_can_actually_take(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/plan").json()
+        body = client.get("/students/{me}/plan").json()
         assert all(r["eligible_now"] for r in body["recommended"])
         assert all(r["missing_prerequisites"] == [] for r in body["recommended"])
 
     def test_top_recommendation_is_justified(self, client) -> None:
         enrol(client)
-        top = client.get("/students/jane/plan").json()["recommended"][0]
+        top = client.get("/students/{me}/plan").json()["recommended"][0]
         assert top["course"]["code"] == "COSC220"
         assert top["serves"]
         assert any("required by" in r for r in top["reasons"])
@@ -257,7 +239,7 @@ class TestPlanEndpoint:
 
     def test_blocked_courses_are_listed_separately_with_reasons(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/plan").json()
+        body = client.get("/students/{me}/plan").json()
         assert body["blocked"]
         for entry in body["blocked"]:
             assert entry["eligible_now"] is False
@@ -265,30 +247,30 @@ class TestPlanEndpoint:
 
     def test_plan_carries_the_coverage_caveat(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/plan").json()
+        body = client.get("/students/{me}/plan").json()
         assert "PARTIAL" in body["coverage"]
         assert body["caveats"]
 
     def test_only_confirmed_coursework_shapes_the_plan(self, client) -> None:
         """Unconfirmed rows must not make a student look eligible for anything."""
         enrol(client, only={"COSC111"})
-        body = client.get("/students/jane/plan").json()
+        body = client.get("/students/{me}/plan").json()
         assert {c["code"] for c in body["completed"]} == {"COSC111"}
         suggested = {r["course"]["code"] for r in body["recommended"]}
         assert "COSC220" not in suggested, "COSC112 was never confirmed"
 
     def test_limit_is_applied(self, client) -> None:
         enrol(client)
-        body = client.get("/students/jane/plan", params={"limit": 2}).json()
+        body = client.get("/students/{me}/plan", params={"limit": 2}).json()
         assert len(body["recommended"]) <= 2
 
     def test_limit_is_validated(self, client) -> None:
         enrol(client)
-        assert client.get("/students/jane/plan", params={"limit": 0}).status_code == 422
+        assert client.get("/students/{me}/plan", params={"limit": 0}).status_code == 422
 
     def test_unknown_student_is_404(self, client) -> None:
         assert client.get("/students/nobody/plan").status_code == 404
 
     def test_missing_program_is_400(self, client) -> None:
         enrol(client, program=None)
-        assert client.get("/students/jane/plan").status_code == 400
+        assert client.get("/students/{me}/plan").status_code == 400

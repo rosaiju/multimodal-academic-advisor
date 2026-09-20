@@ -3,7 +3,8 @@ import { Alert, Spinner } from './components/ui'
 import UploadStep from './components/UploadStep'
 import ReviewStep from './components/ReviewStep'
 import Dashboard from './components/Dashboard'
-import { deleteRecord, getHealth, getPrograms, getRecord } from './api'
+import SignIn from './components/SignIn'
+import { deleteRecord, getHealth, getPrograms, getRecord, logout } from './api'
 
 /**
  * COSC 490 Multimodal Academic Advisor.
@@ -11,10 +12,10 @@ import { deleteRecord, getHealth, getPrograms, getRecord } from './api'
  * Three steps, matching the backend's own shape: upload (stores nothing), review
  * and confirm (the only way data becomes trusted), then the audit and plan.
  *
- * There is no authentication yet, so the student id is fixed for the demo. That
- * is a known gap, flagged in PR #3 rather than papered over here.
+ * Nothing here knows a student id until the server issues one. `user` is null
+ * until sign-in, and every student-scoped call uses `user.student_id`, so there
+ * is no id for the frontend to guess, type, or get wrong.
  */
-const DEMO_STUDENT_ID = 'demo-student'
 
 const STEPS = [
   { id: 'upload', label: 'Upload transcript' },
@@ -27,6 +28,7 @@ export default function App() {
   const [health, setHealth] = useState(null)
   const [programs, setPrograms] = useState([])
   const [programId, setProgramId] = useState('')
+  const [user, setUser] = useState(null)
   const [extraction, setExtraction] = useState(null)
   const [bootError, setBootError] = useState(null)
   const [booting, setBooting] = useState(true)
@@ -39,18 +41,30 @@ export default function App() {
         // Prefer the real Morgan catalog over the demo program.
         const morgan = p.find((x) => x.program_id.startsWith('morgan')) ?? p[0]
         if (morgan) setProgramId(morgan.program_id)
-        // Returning student: skip straight to their dashboard.
-        return getRecord(DEMO_STUDENT_ID)
-          .then(() => setStep('dashboard'))
-          .catch(() => {})
       })
       .catch((err) => setBootError(err.message))
       .finally(() => setBooting(false))
   }, [])
 
+  /** Signed in: find out whether they already have coursework on record. */
+  function afterSignIn(account) {
+    setUser(account)
+    getRecord(account.student_id)
+      .then(() => setStep('dashboard'))
+      .catch(() => setStep('upload'))
+  }
+
+  function signOut() {
+    logout()
+    setUser(null)
+    setExtraction(null)
+    setStep('upload')
+  }
+
   async function reset() {
+    if (!user) return
     try {
-      await deleteRecord(DEMO_STUDENT_ID)
+      await deleteRecord(user.student_id)
     } catch {
       /* nothing stored yet - fine */
     }
@@ -71,22 +85,37 @@ export default function App() {
             </p>
           </div>
           <nav className="flex items-center gap-1.5 text-xs">
-            {STEPS.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-1.5">
-                <span
-                  className={`rounded-full px-2.5 py-1 font-medium ${
-                    i === activeIndex
-                      ? 'bg-slate-900 text-white'
-                      : i < activeIndex
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'text-slate-400'
-                  }`}
-                >
-                  {i + 1}. {s.label}
+            {user && (
+              <div className="mr-3 flex items-center gap-2 border-r border-slate-200 pr-3">
+                <span className="max-w-40 truncate text-slate-600" title={user.email}>
+                  {user.name || user.email}
                 </span>
-                {i < STEPS.length - 1 && <span className="text-slate-300">›</span>}
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="font-medium text-slate-900 underline underline-offset-2"
+                >
+                  Sign out
+                </button>
               </div>
-            ))}
+            )}
+            {user &&
+              STEPS.map((s, i) => (
+                <div key={s.id} className="flex items-center gap-1.5">
+                  <span
+                    className={`rounded-full px-2.5 py-1 font-medium ${
+                      i === activeIndex
+                        ? 'bg-slate-900 text-white'
+                        : i < activeIndex
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'text-slate-400'
+                    }`}
+                  >
+                    {i + 1}. {s.label}
+                  </span>
+                  {i < STEPS.length - 1 && <span className="text-slate-300">›</span>}
+                </div>
+              ))}
           </nav>
         </div>
       </header>
@@ -113,7 +142,13 @@ export default function App() {
           </div>
         )}
 
-        {!booting && !bootError && (
+        {/*
+          The gate. Nothing student-facing renders until an account exists,
+          because until then there is no student id to render it for.
+        */}
+        {!booting && !bootError && !user && <SignIn onSignedIn={afterSignIn} />}
+
+        {!booting && !bootError && user && (
           <>
             {step === 'upload' && (
               <UploadStep
@@ -131,7 +166,6 @@ export default function App() {
             {step === 'review' && extraction && (
               <ReviewStep
                 extraction={extraction}
-                studentId={DEMO_STUDENT_ID}
                 programId={programId}
                 onConfirmed={() => setStep('dashboard')}
                 onBack={() => setStep('upload')}
@@ -140,7 +174,7 @@ export default function App() {
 
             {step === 'dashboard' && (
               <Dashboard
-                studentId={DEMO_STUDENT_ID}
+                studentId={user.student_id}
                 onAddMore={() => setStep('upload')}
                 onReset={reset}
               />

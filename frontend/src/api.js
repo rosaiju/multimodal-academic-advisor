@@ -11,7 +11,32 @@
 
 const BASE = '/api'
 
+/**
+ * The access token, held in memory only.
+ *
+ * Deliberately NOT localStorage. A token in localStorage is readable by any
+ * script that ends up on the page, and it outlives the tab - a shared lab
+ * machine would keep someone signed in for whoever sat down next. The cost is
+ * that a refresh signs you out, which for a browser demo is the right trade.
+ */
+let accessToken = null
+
+export function setAccessToken(token) {
+  accessToken = token
+}
+
+export function clearAccessToken() {
+  accessToken = null
+}
+
+export function hasAccessToken() {
+  return accessToken !== null
+}
+
 async function request(path, options = {}) {
+  const headers = { ...(options.headers ?? {}) }
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+  options = { ...options, headers }
   let response
   try {
     response = await fetch(`${BASE}${path}`, options)
@@ -60,12 +85,15 @@ export function uploadTranscript(file, programId) {
  * `items` are { extracted, term?, grade?, credits? } - the extracted row goes
  * back verbatim and any correction travels beside it, so the record keeps both.
  */
-export function confirmCourses({ studentId, programId, sourceName, extractor, items }) {
+/*
+ * No student_id: the backend takes it from the access token. A client that could
+ * name the record it wrote to could write to someone else's.
+ */
+export function confirmCourses({ programId, sourceName, extractor, items }) {
   return request('/ingest/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      student_id: studentId,
       program_id: programId,
       source_name: sourceName,
       extractor,
@@ -90,3 +118,35 @@ export const getRecord = (studentId) => request(`/students/${studentId}/record`)
 /** DELETE /students/{id}/record - used by the demo reset button. */
 export const deleteRecord = (studentId) =>
   request(`/students/${studentId}/record`, { method: 'DELETE' })
+
+// ---- auth ----
+
+/** POST /auth/register - creates the account AND signs in. */
+export async function register({ email, password, name }) {
+  const body = await request('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name: name || null }),
+  })
+  setAccessToken(body.access_token)
+  return body.user
+}
+
+/** POST /auth/login */
+export async function login({ email, password }) {
+  const body = await request('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  setAccessToken(body.access_token)
+  return body.user
+}
+
+/** GET /auth/me - how the app learns its own student id. It never invents one. */
+export const getMe = () => request('/auth/me')
+
+/** Local only. The token is stateless, so there is nothing to tell the server. */
+export function logout() {
+  clearAccessToken()
+}

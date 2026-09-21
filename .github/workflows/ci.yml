@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # Not just [main]. PRs in this project are STACKED -- PR #4 targets
+  # feature/transcript-ingestion, not main -- and a `branches` filter matches the
+  # PR's BASE. Filtering on main alone meant a stacked PR merged with no CI run at
+  # all, silently: a green-looking PR that was never tested. `**` covers every base.
   pull_request:
-    branches: [main]
+    branches: ['**']
 
 # A second push to the same PR cancels the older run instead of queueing behind it.
 concurrency:
@@ -14,6 +18,13 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # CI used to test 3.12 alone while the team develops on 3.14, so a green tick
+    # said nothing about the interpreter anyone actually runs. Both ends of the
+    # supported range (`requires-python = ">=3.11,<3.15"`) now run.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
     defaults:
       run:
         working-directory: backend
@@ -23,7 +34,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies

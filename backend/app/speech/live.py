@@ -14,10 +14,16 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable
+import urllib.parse
+from collections.abc import AsyncIterator, Iterable, Sequence
 from dataclasses import dataclass, field
 
+from websockets.asyncio.client import ClientConnection, connect
+from websockets.exceptions import ConnectionClosed, InvalidHandshake
+
+from app.config import Settings, get_settings
 from app.speech.course_codes import normalize_course_mentions
+from app.speech.deepgram import SpeechError
 
 log = logging.getLogger(__name__)
 
@@ -95,3 +101,84 @@ class LiveTranscript:
     @property
     def heard_speech(self) -> bool:
         return bool(self._finals or self._partial)
+
+
+def live_url(settings: Settings, keyterms: Sequence[str]) -> str:
+    """The Deepgram live endpoint for these settings. The key is NOT in it."""
+    base = settings.deepgram_base_url.rstrip("/")
+    if base.startswith("https://"):
+        base = "wss://" + base.removeprefix("https://")
+    elif base.startswith("http://"):
+        base = "ws://" + base.removeprefix("http://")
+    params = [
+        ("model", settings.deepgram_model),
+        ("smart_format", "true"),
+        # Students' questions about their records are not training data.
+        ("mip_opt_out", "true"),
+        # Partial phrases are what make the text appear while the student talks;
+        # utterance_end_ms also requires them.
+        ("interim_results", "true"),
+        ("endpointing", "300"),
+        # 1.5 s without words ends the session - the "stop when I pause" choice.
+        ("utterance_end_ms", "1500"),
+    ]
+    params += [("keyterm", term) for term in keyterms]
+    return f"{base}/v1/listen?{urllib.parse.urlencode(params)}"
+
+
+class DeepgramLive:
+    """One Deepgram live session. Every failure to connect is SpeechError("unavailable");
+    a connection that drops later simply ends `events()`.
+    """
+
+    def __init__(self) -> None:
+        self._ws: ClientConnection | None = None
+
+    async def connect(
+        self, keyterms: Sequence[str] = (), *, settings: Settings | None = None
+    ) -> None:
+        settings = settings or get_settings()
+        if not settings.deepgram_api_key:
+            raise SpeechError("unavailable", "no Deepgram key is configured")
+        try:
+            self._ws = await connect(
+                live_url(settings, keyterms),
+                additional_headers={"Authorization": f"Token {settings.deepgram_api_key}"},
+                open_timeout=settings.deepgram_timeout_seconds,
+            )
+        except (InvalidHandshake, OSError, TimeoutError) as exc:
+            # The handshake response can name the account; it stays in the log.
+            log.warning("Deepgram live connection failed: %s", exc)
+            raise SpeechError("unavailable", "Deepgram live connection failed") from exc
+
+    async def send_audio(self, chunk: bytes) -> None:
+        if self._ws is None:
+            return
+        try:
+            await self._ws.send(chunk)
+        except ConnectionClosed:
+            pass  # events() ends on its own; the session winds down from there
+
+    async def finish(self) -> None:
+        """Ask Deepgram to flush what it has and close."""
+        if self._ws is None:
+            return
+        try:
+            await self._ws.send(json.dumps({"type": "CloseStream"}))
+        except ConnectionClosed:
+            pass
+
+    async def events(self) -> AsyncIterator[LiveEvent]:
+        if self._ws is None:
+            return
+        try:
+            async for raw in self._ws:
+                event = parse_live_message(raw)
+                if event is not None:
+                    yield event
+        except ConnectionClosed as exc:
+            log.warning("Deepgram live connection dropped: %s", exc)
+
+    async def close(self) -> None:
+        if self._ws is not None:
+            await self._ws.close()

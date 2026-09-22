@@ -1013,14 +1013,14 @@ async def _send(websocket: WebSocket, payload: dict) -> bool:
     try:
         await websocket.send_json(payload)
         return True
-    except Exception:  # noqa: BLE001 - any send failure means the client is gone
+    except Exception:  # any send failure means the browser has gone
         return False
 
 
 async def _close(websocket: WebSocket) -> None:
     try:
         await websocket.close()
-    except Exception:  # noqa: BLE001 - already closed is fine
+    except Exception:  # already closed is fine
         pass
 
 
@@ -1167,8 +1167,6 @@ app.include_router(voice_router.router)
 
 Run: `.venv/Scripts/python -m pytest tests/test_listen_api.py tests/test_auth.py -q`
 Expected: all pass.
-
-If ruff flags `BLE001`, that rule is not in this repo's `select` list (`E, F, I, UP, B`), so the `noqa` comments are unnecessary. Remove them rather than adding the rule.
 
 If `test_a_token_for_a_deleted_account_is_unauthorized` still passes the token, check that `user_store(settings)` is built from the per-request `settings`. Changing `USER_DIR` in the test must point the route at the empty directory.
 
@@ -1687,14 +1685,18 @@ s = get_settings(); registry.load(s.catalog_dir); programs = registry.list_progr
 codes = [c.code for p in programs for c in p.courses]
 with wave.open(str(WAV)) as w:
     rate, pcm = w.getframerate(), w.readframes(w.getnframes())
+# 5 s of faint room noise after the speech, like a mic that keeps listening.
 data = pcm + b"".join(struct.pack("<h", random.randint(-60, 60)) for _ in range(rate * 5))
-s = s.model_copy(update={"deepgram_base_url": s.deepgram_base_url})
+
+# Raw PCM must declare its encoding (the browser's webm does not). Patch the URL
+# builder for this script only; DeepgramLive.connect looks it up at call time.
+import app.speech.live as live_module
+_original_url = live_module.live_url
+live_module.live_url = lambda st, kt: _original_url(st, kt) + f"&encoding=linear16&sample_rate={rate}"
 
 async def main():
     live = DeepgramLive()
     await live.connect(spoken_course_codes(programs), settings=s)
-    # Raw PCM needs its encoding declared; the browser's webm does not.
-    live._ws.request.path  # connected
     tr, t = LiveTranscript(), time.time()
     async def feed():
         step = rate * 2 // 4
@@ -1711,16 +1713,8 @@ asyncio.run(main())
 EOF
 ```
 
-**Note:** raw PCM needs `encoding=linear16&sample_rate=<rate>` on the URL, which `live_url` does not add, because the browser sends a webm container. For this check, temporarily pass those two parameters by calling `connect` with a `settings` whose `deepgram_model` is unchanged and patching `app.speech.live.live_url` in the script:
-
-```python
-import app.speech.live as L
-_orig = L.live_url
-L.live_url = lambda st, kt: _orig(st, kt) + f"&encoding=linear16&sample_rate={rate}"
-```
-
-Add those three lines right after the imports.
-Expected: partials grow, the final reads `Can I take UNIV 101 or COSC 243?`, and `UtteranceEnd` arrives about 1–2 s after the final. Record the timings.
+Why raw PCM: a WAV file's fixed length makes Deepgram close the stream when the file's data runs out, before `UtteranceEnd` can fire. This was seen in the Sep 22 probe.
+Expected: partials grow, the final reads `Can I take UNIV 101 or COSC 243?`, and `UtteranceEnd` arrives about 1–2 s after the final (probe: final at about 4.8 s, `UtteranceEnd` at about 5.8 s). Record the output.
 
 - [ ] **Step 2: Update `docs/advisor.md`**
 

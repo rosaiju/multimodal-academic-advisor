@@ -14,7 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.catalog.registry import registry
 from app.config import get_settings
+from app.routers import audit as audit_router
 from app.routers import catalog as catalog_router
+from app.routers import ingest as ingest_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -26,6 +28,15 @@ async def lifespan(app: FastAPI):
     # Deliberately NOT wrapped in try/except: a malformed catalog must stop the
     # server, not start it with silently-wrong degree requirements.
     registry.load(settings.catalog_dir)
+
+    # Registered here, from outside the ingestion package, so app/ingestion/ never
+    # imports app/llm/. Absent an API key this is a no-op and text transcripts
+    # keep working.
+    from app.llm.registration import register_vision_extractor
+
+    vision = register_vision_extractor(settings)
+    logger.info("vision transcript extractor: %s", vision or "not configured")
+
     logger.info(
         "catalog ready (%d programs); llm_provider=%s configured=%s",
         len(registry.list_programs()),
@@ -57,12 +68,20 @@ app.add_middleware(
 @app.get("/health", tags=["system"])
 def health() -> dict[str, object]:
     settings = get_settings()
+    from app.ingestion.extractor import registered_extractors
+
+    extractors = registered_extractors()
     return {
         "status": "ok",
         "catalog_loaded": registry.is_loaded,
         "programs": [p.program_id for p in registry.list_programs()],
         "llm_provider": settings.llm_provider,
         "llm_configured": settings.llm_configured,
+        # Which transcript formats actually work right now. Without a configured
+        # provider the vision reader is absent and scans cannot be processed,
+        # which is worth surfacing rather than discovering on a 415.
+        "transcript_extractors": extractors,
+        "accepts_scanned_transcripts": any(e.startswith("vision:") for e in extractors),
     }
 
 
@@ -84,9 +103,9 @@ def list_programs() -> list[dict[str, object]]:
 
 
 app.include_router(catalog_router.router)
+app.include_router(ingest_router.router)
+app.include_router(audit_router.router)
 
 # Remaining routers land here as each owner delivers them:
-#   app.include_router(audit.router)     # Person 1
 #   app.include_router(chat.router)      # Person 2
-#   app.include_router(ingest.router)    # Person 3
 #   app.include_router(students.router)  # Person 3

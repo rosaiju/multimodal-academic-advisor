@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./advisor.db"
     catalog_dir: Path = REPO_ROOT / "data" / "catalog"
     upload_dir: Path = BACKEND_DIR / "uploads"
+    #: One JSON file per student. Files rather than a table so a person can open
+    #: a record and see exactly what the system believes and where it came from.
+    student_record_dir: Path = BACKEND_DIR / "student_records"
+    #: Transcripts are small. This is a guard against a memory-exhausting upload,
+    #: not a policy about document length.
+    max_upload_bytes: int = 5 * 1024 * 1024
 
     # --- Web ---
     cors_origins: str = "http://localhost:5173"

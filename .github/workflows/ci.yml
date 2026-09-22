@@ -27,7 +27,10 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        # The ingestion extra carries pdfplumber. PDF transcript reading is a real
+        # feature of the ingestion layer, so CI must actually exercise it rather
+        # than skipping it and going green.
+        run: pip install -e ".[dev,ingestion]"
 
       - name: Lint (ruff)
         run: ruff check .

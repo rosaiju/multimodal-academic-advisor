@@ -27,3 +27,7 @@ frontend/dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Student records written at runtime (per-student JSON).
+backend/student_records/
+backend/uploads/

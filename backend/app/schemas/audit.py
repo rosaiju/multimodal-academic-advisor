@@ -12,7 +12,7 @@ from __future__ import annotations
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from app.schemas.provenance import Provenance
 
@@ -122,11 +122,13 @@ class CatalogCoverage(BaseModel):
     credits_explicitly_demanded: Decimal
     total_credits_required: Decimal
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def is_complete(self) -> bool:
         """True only when every catalog course is claimed by some requirement."""
         return self.courses_satisfying_no_block == 0
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def summary(self) -> str:
         if self.is_complete:
@@ -166,12 +168,14 @@ class AuditResult(BaseModel):
     #: Always VERIFIED — this object is engine output by construction.
     provenance: Provenance = Provenance.VERIFIED
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def percent_complete(self) -> float:
         if self.total_credits_required == 0:
             return 0.0
         return float(self.total_credits_applied / self.total_credits_required * 100)
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def is_graduation_eligible(self) -> bool:
         """Never True while the catalog itself is known to be incomplete.

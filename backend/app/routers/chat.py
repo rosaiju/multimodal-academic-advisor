@@ -23,6 +23,7 @@ from app.catalog.registry import registry
 from app.config import get_settings
 from app.ingestion.store import RecordStore, StoredRecordError
 from app.llm.chat import get_chat_provider
+from app.speech.course_codes import normalize_course_mentions
 from app.speech.deepgram import SpeechError, transcribe
 from app.speech.keyterms import spoken_course_codes
 
@@ -198,13 +199,15 @@ def transcribe_question(
     if not data:
         raise HTTPException(status_code=422, detail=VOICE_UNREADABLE)
 
+    programs = registry.list_programs()
     try:
-        result = transcribe(
-            data, mime_type, spoken_course_codes(registry.list_programs()), settings=settings
-        )
+        result = transcribe(data, mime_type, spoken_course_codes(programs), settings=settings)
     except SpeechError as exc:
         if exc.kind == "unreadable":
             raise HTTPException(status_code=422, detail=VOICE_UNREADABLE) from None
         raise HTTPException(status_code=503, detail=VOICE_UNAVAILABLE) from None
 
-    return TranscribeResponse(text=result.text, confidence=result.confidence)
+    # "computer science two forty three" -> "COSC 243", but only for real courses.
+    catalog_codes = [course.code for program in programs for course in program.courses]
+    text = normalize_course_mentions(result.text, catalog_codes)
+    return TranscribeResponse(text=text, confidence=result.confidence)

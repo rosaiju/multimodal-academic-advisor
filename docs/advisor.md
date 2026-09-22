@@ -129,6 +129,10 @@ for the question box and never asks the advisor anything itself.
   `mip_opt_out=true`) → text in the box → the student presses Ask.
 - **Key terms:** every catalog course code in spoken form ("COSC 241") is sent as
   a Deepgram `keyterm`, built by `app/speech/keyterms.py` from the loaded catalog.
+- **Spoken numbers:** Deepgram writes "Computer Science two forty three" as
+  words (its `numerals` option makes it "2 43"). `app/speech/course_codes.py`
+  rewrites these as `COSC 243`, and only when that code is in the catalog. An
+  unknown code is left exactly as heard, never guessed at.
 - **Never auto-sent.** A misheard course code should be caught by the student,
   not answered. Below 0.6 confidence the panel asks them to check it.
 - **Privacy:** audio is never saved. It exists for one request and is then

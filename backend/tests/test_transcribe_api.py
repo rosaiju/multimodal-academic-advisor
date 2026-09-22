@@ -79,6 +79,16 @@ class TestHappyPath:
         assert "COSC 241" in terms
         assert "COSC" in terms
 
+    def test_spoken_course_codes_come_back_as_catalog_codes(
+        self, client, voice_on, fake_deepgram
+    ) -> None:
+        fake_deepgram[1]["result"] = Transcript(
+            text="Can I take University one zero one or Computer Science two forty three?",
+            confidence=0.97,
+        )
+        response = upload(client)
+        assert response.json()["text"] == "Can I take UNIV 101 or COSC 243?"
+
     def test_silence_is_a_200_with_empty_text(self, client, voice_on, fake_deepgram) -> None:
         fake_deepgram[1]["result"] = Transcript(text="", confidence=0.0)
         response = upload(client)

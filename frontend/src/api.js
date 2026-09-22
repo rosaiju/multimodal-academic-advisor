@@ -152,6 +152,20 @@ export function askAdvisor({ message, conversationId = 'default', useLlm = true 
 export const resetConversation = (conversationId = 'default') =>
   request(`/advisor/chat/${encodeURIComponent(conversationId)}`, { method: 'DELETE' })
 
+/**
+ * POST /advisor/transcribe - a spoken question, returned as text to REVIEW.
+ *
+ * The result goes into the question box, never straight to the advisor: a
+ * misheard course code should be caught by the student, not answered.
+ * The filename's extension is cosmetic; Deepgram detects the format itself.
+ */
+export function transcribeAudio(blob) {
+  const form = new FormData()
+  const extension = (blob.type.split('/')[1] ?? 'webm').split(';')[0] || 'webm'
+  form.append('audio', blob, `question.${extension}`)
+  return request('/advisor/transcribe', { method: 'POST', body: form })
+}
+
 // ---- auth ----
 
 /** POST /auth/register - creates the account AND signs in. */

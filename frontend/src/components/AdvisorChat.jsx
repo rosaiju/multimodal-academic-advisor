@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { askAdvisor, getAdvisorHealth, resetConversation } from '../api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { askAdvisor, getAdvisorHealth, resetConversation, transcribeAudio } from '../api'
 import { Alert, Button, Card, Spinner } from './ui'
+import { useVoiceRecorder } from './useVoiceRecorder'
 
 /**
  * The conversational advisor.
@@ -19,6 +20,22 @@ import { Alert, Button, Card, Spinner } from './ui'
 
 const CONVERSATION_ID = 'default'
 
+/** Below this Deepgram confidence the student is asked to check the text. */
+const LOW_CONFIDENCE = 0.6
+
+const VOICE_MESSAGES = {
+  unavailable: "Voice input isn't available right now — you can still type.",
+  unreadable: "Couldn't read that recording — try again.",
+  empty: "Didn't catch that — try again.",
+  lowConfidence: 'Check this — I may have misheard.',
+}
+
+/** Speech is added after anything already typed, never in place of it. */
+function mergeDraft(current, spoken) {
+  const typed = current.trim()
+  return typed ? `${typed} ${spoken}` : spoken
+}
+
 export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [health, setHealth] = useState(null)
   const [messages, setMessages] = useState([])
@@ -26,6 +43,41 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const scroller = useRef(null)
+  const input = useRef(null)
+  const [transcribing, setTranscribing] = useState(false)
+  const [voiceNote, setVoiceNote] = useState(null)
+
+  const handleRecorded = useCallback(async (blob) => {
+    setTranscribing(true)
+    try {
+      const { text, confidence } = await transcribeAudio(blob)
+      if (!text.trim()) {
+        setVoiceNote(VOICE_MESSAGES.empty)
+        return
+      }
+      setDraft((current) => mergeDraft(current, text.trim()))
+      setVoiceNote(confidence < LOW_CONFIDENCE ? VOICE_MESSAGES.lowConfidence : null)
+      input.current?.focus()
+    } catch (err) {
+      setVoiceNote(
+        [413, 415, 422].includes(err.status)
+          ? VOICE_MESSAGES.unreadable
+          : VOICE_MESSAGES.unavailable,
+      )
+    } finally {
+      setTranscribing(false)
+    }
+  }, [])
+
+  const recorder = useVoiceRecorder({ onRecorded: handleRecorded })
+  const voiceOn = Boolean(health?.voice_available)
+  const voiceBusy = recorder.recording || transcribing
+
+  function toggleRecording() {
+    setVoiceNote(null)
+    if (recorder.recording) recorder.stop()
+    else recorder.start()
+  }
 
   useEffect(() => {
     getAdvisorHealth()
@@ -44,6 +96,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
     if (!question || busy) return
     setError(null)
     setDraft('')
+    setVoiceNote(null)
     setMessages((prev) => [...prev, { role: 'user', text: question }])
     setBusy(true)
     try {
@@ -158,7 +211,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
                 key={question}
                 type="button"
                 onClick={() => send(question)}
-                disabled={busy}
+                disabled={busy || voiceBusy}
                 className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 {question}
@@ -179,17 +232,37 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </label>
           <input
             id="advisor-question"
+            ref={input}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              setVoiceNote(null)
+            }}
             placeholder="What should I take next semester?"
-            disabled={busy}
+            disabled={busy || transcribing}
             maxLength={2000}
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
           />
-          <Button type="submit" disabled={busy || !draft.trim()}>
+          {voiceOn && (
+            <MicButton
+              recording={recorder.recording}
+              transcribing={transcribing}
+              disabled={busy || transcribing || !recorder.supported}
+              onClick={toggleRecording}
+            />
+          )}
+          <Button type="submit" disabled={busy || voiceBusy || !draft.trim()}>
             Ask
           </Button>
         </form>
+
+        {voiceOn && (voiceNote || recorder.error || !recorder.supported) && (
+          <p className="mt-2 text-xs text-slate-500" role="status">
+            {voiceNote ??
+              recorder.error ??
+              'This browser cannot record audio. You can still type your question.'}
+          </p>
+        )}
       </Card>
 
       <p className="text-center text-xs text-slate-400">
@@ -239,5 +312,38 @@ function AdvisorTurn({ reply }) {
         {reply.notice && <p className="px-1 text-xs italic text-slate-400">{reply.notice}</p>}
       </div>
     </div>
+  )
+}
+
+/** Toggle: click to start, click to stop. Red and pulsing while it listens. */
+function MicButton({ recording, transcribing, disabled, onClick }) {
+  const label = recording
+    ? 'Stop recording'
+    : transcribing
+      ? 'Transcribing your question'
+      : 'Ask by voice'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled && !recording}
+      aria-pressed={recording}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full ring-1 ring-inset transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        recording
+          ? 'animate-pulse bg-rose-600 text-white ring-rose-600'
+          : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
+      }`}
+    >
+      {transcribing ? (
+        <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <rect x="9" y="3" width="6" height="12" rx="3" />
+          <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeLinecap="round" />
+        </svg>
+      )}
+    </button>
   )
 }

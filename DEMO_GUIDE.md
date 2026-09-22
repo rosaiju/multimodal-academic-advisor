@@ -40,14 +40,27 @@ curl http://127.0.0.1:8000/advisor/health  # degraded: true is CORRECT, see belo
 ```
 
 - [ ] `auth_secret_is_ephemeral` is `false` — otherwise a backend restart signs you out mid-demo
-- [ ] <http://localhost:5173> loads the sign-in screen
-- [ ] You are signed out, or signed in as an account with **no transcript yet** (you want to land on Upload)
+- [ ] <http://localhost:5173> loads the sign-in screen, **signed out**
 - [ ] Have `data/samples/demo_transcript.txt` findable in the file picker
 - [ ] Browser zoom ~125% so the back row can read it
 
-**To rehearse twice:** after a run, reset the record so you land on Upload again —
-sign in, open devtools, or just delete the account's record via
-`DELETE /students/{id}/record`. Registering a fresh throwaway account also works.
+**Which account to demo with.** Register a throwaway one live — it takes about
+fifteen seconds and it is the only way to guarantee you land on Upload, which is
+where the story starts. The existing `rosai2@morgan.edu` account already has a
+confirmed record, so signing in as it jumps straight to the Dashboard and skips
+the upload and review screens entirely.
+
+```
+Email:    demo.student.1@morgan.edu      (bump the number each rehearsal)
+Name:     Demo Student
+Password: any 12+ characters you will remember for ten minutes
+```
+
+**To rehearse twice:** register a new throwaway address, or reset the record on
+the one you used via `DELETE /students/{id}/record`. Accounts are single JSON
+files in `backend/accounts/`, records in `backend/student_records/`; both are
+gitignored. Delete throwaway files there when you are done — but list the
+directory first and never use a wildcard, and **leave `rosai2@morgan.edu` alone.**
 
 ---
 
@@ -65,7 +78,7 @@ Have <http://localhost:5173> on screen, signed out.
 
 ## 0:20 – 1:10 — The UI: upload, review, confirm
 
-1. Sign in (or *Create an account*).
+1. Click **Create an account** and register the throwaway address. You land on Upload.
 2. Program: **BS Computer Science — Morgan State University (2026-2028)**.
 3. Choose `data/samples/demo_transcript.txt`, click **Read transcript**.
 

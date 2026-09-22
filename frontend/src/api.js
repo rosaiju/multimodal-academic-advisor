@@ -119,6 +119,39 @@ export const getRecord = (studentId) => request(`/students/${studentId}/record`)
 export const deleteRecord = (studentId) =>
   request(`/students/${studentId}/record`, { method: 'DELETE' })
 
+// ---- advisor ----
+
+/**
+ * GET /advisor/health - whether a chat model is usable right now.
+ *
+ * Asked on load so the chat panel can say up front that it is running on the
+ * degree engine alone, rather than letting a student discover it mid-question.
+ */
+export const getAdvisorHealth = () => request('/advisor/health')
+
+/**
+ * POST /advisor/chat
+ *
+ * No student id: the backend takes it from the token, the same rule
+ * `confirmCourses` follows. `conversationId` groups turns into one session and
+ * is scoped server-side to the signed-in student.
+ */
+export function askAdvisor({ message, conversationId = 'default', useLlm = true }) {
+  return request('/advisor/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId,
+      use_llm: useLlm,
+    }),
+  })
+}
+
+/** DELETE /advisor/chat/{id} - forget one conversation. */
+export const resetConversation = (conversationId = 'default') =>
+  request(`/advisor/chat/${encodeURIComponent(conversationId)}`, { method: 'DELETE' })
+
 // ---- auth ----
 
 /** POST /auth/register - creates the account AND signs in. */

@@ -22,7 +22,7 @@ import { getAuditSummary, getPlan } from '../api'
  * because a bare "9.2% complete" invites exactly the misreading that line exists
  * to prevent.
  */
-export default function Dashboard({ studentId, onAddMore, onReset }) {
+export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor }) {
   const [summary, setSummary] = useState(null)
   const [plan, setPlan] = useState(null)
   const [error, setError] = useState(null)
@@ -64,7 +64,10 @@ export default function Dashboard({ studentId, onAddMore, onReset }) {
       {/* ---- progress ---- */}
       <Card
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {onAskAdvisor && (
+              <Button onClick={onAskAdvisor}>Ask the advisor</Button>
+            )}
             <Button variant="secondary" onClick={onAddMore}>
               Add another transcript
             </Button>

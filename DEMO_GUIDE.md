@@ -1,275 +1,155 @@
-# Demo guide
+# Demo guide — 3-minute in-class script
 
-A scripted run of the COSC 490 Multimodal Academic Advisor, from a cold machine
-to the AI advisor answering questions.
+COSC 490 Progress Report 1. Multimodal Academic Advisor.
 
-> **All data in this demo is synthetic.** `data/samples/demo_transcript.txt` is a
-> fabricated transcript for a fictional student, written for this project. No
-> real student record is used anywhere in this repository. Say so out loud when
-> demoing — the system's whole argument is about being careful with academic
-> records.
+Longer reference — every question the advisor can answer, all known limitations,
+full troubleshooting table — is in [`docs/demo-reference.md`](docs/demo-reference.md).
+This file is only the script.
 
-**You do not need an API key.** The advisor answers every question below with no
-model configured. See [Why no API key is needed](#why-no-api-key-is-needed).
+> **All data shown is synthetic.** `data/samples/demo_transcript.txt` is a
+> fabricated transcript for a fictional student. Say so out loud — the project's
+> whole argument is about handling academic records carefully.
+
+**No API key is needed.** Every answer below comes from the degree engine.
 
 ---
 
-## 1. Start it
+## Before you walk in (5 minutes, not part of the 3)
 
-Two terminals, both from the repo root.
-
-**Terminal 1 — backend**
+Two terminals from the repo root.
 
 ```bash
+# Terminal 1 — backend
 cd backend
-python -m venv .venv
-.venv\Scripts\python -m pip install -e ".[dev,ingestion]"     # Windows
-# .venv/bin/python -m pip install -e ".[dev,ingestion]"       # macOS / Linux
+.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000   # Windows
+# .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000     # macOS/Linux
 
-.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-# .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-**Terminal 2 — frontend**
-
-```bash
+# Terminal 2 — frontend
 cd frontend
-npm ci
 npm run dev
 ```
 
-Open **<http://localhost:5173>**.
+First time on a machine, install first: `pip install -e ".[dev,ingestion]"` in
+`backend/`, `npm ci` in `frontend/`.
 
-Start the backend first. The frontend proxies `/api/*` to port 8000, so if the
-backend is not up the first page load shows a "cannot reach the backend" message
-until you refresh.
-
-**Check it is healthy** before the professor is watching:
+Pre-flight checklist:
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/advisor/health
+curl http://127.0.0.1:8000/health          # catalog_loaded: true, 2 programs
+curl http://127.0.0.1:8000/advisor/health  # degraded: true is CORRECT, see below
 ```
 
-`/health` should report `"catalog_loaded": true` and two programs.
-`/advisor/health` reports whether a model is available — `"degraded": true` just
-means answers come from the degree engine, which is the supported mode.
+- [ ] `auth_secret_is_ephemeral` is `false` — otherwise a backend restart signs you out mid-demo
+- [ ] <http://localhost:5173> loads the sign-in screen
+- [ ] You are signed out, or signed in as an account with **no transcript yet** (you want to land on Upload)
+- [ ] Have `data/samples/demo_transcript.txt` findable in the file picker
+- [ ] Browser zoom ~125% so the back row can read it
+
+**To rehearse twice:** after a run, reset the record so you land on Upload again —
+sign in, open devtools, or just delete the account's record via
+`DELETE /students/{id}/record`. Registering a fresh throwaway account also works.
 
 ---
 
-## 2. Environment variables
+## 0:00 – 0:20 — The thesis
 
-**Every one of these is optional.** The backend runs with no `.env` at all.
+> "An AI advisor that guesses your degree progress is worse than no advisor. So
+> in ours, the language model is **not allowed** to compute anything. A
+> deterministic Python engine reads the real Morgan State 2026-2028 catalog and
+> computes the audit. The model is only ever allowed to reword what the engine
+> already decided."
 
-| Variable | Why you'd set it |
-|---|---|
-| `JWT_SECRET` | Unset means a new signing key per process, so **every backend restart signs you out**. Set it before a demo. |
-| `LLM_PROVIDER` | `anthropic` \| `openai` \| `gemini` \| `ollama`. Default `anthropic`. |
-| `GEMINI_API_KEY` | Lets Gemini phrase the advisor's answers. |
-| `OLLAMA_BASE_URL` / `OLLAMA_CHAT_MODEL` | For a local model with no key and no credits. |
-
-The file must be **`backend/.env`**. A `.env` at the repo root is silently
-ignored — no error, no warning.
-
-```bash
-cd backend
-cp ../.env.example .env        # Windows PowerShell: copy ..\.env.example .env
-python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste as JWT_SECRET
-```
-
-**Never commit a key.** CI fails any PR that adds one.
+Have <http://localhost:5173> on screen, signed out.
 
 ---
 
-## 3. Create a demo account
+## 0:20 – 1:10 — The UI: upload, review, confirm
 
-Safest path: **use the UI**. On first load, click *Create an account* and use a
-throwaway address.
+1. Sign in (or *Create an account*).
+2. Program: **BS Computer Science — Morgan State University (2026-2028)**.
+3. Choose `data/samples/demo_transcript.txt`, click **Read transcript**.
 
-```
-Email:    demo.student@morgan.edu
-Name:     Demo Student
-Password: (anything 12+ characters you will remember for 20 minutes)
-```
+Seven rows appear, each marked *Read exactly* and *Not yet confirmed*.
 
-The account lives in `backend/accounts/` as a single JSON file, gitignored. To
-clear demo accounts afterwards, delete the files in `backend/accounts/` and
-`backend/student_records/`.
+> **Say this:** "The upload stored nothing — the response literally says
+> `stored: false`. There is deliberately no 'accept all' button, and the backend
+> has no bulk-accept endpoint; a test asserts one never appears. A course reaches
+> the degree audit because a person looked at it, not because a regex was
+> confident."
 
-> These directories have **no version history and no undo**. Delete files in them
-> only when you know what they are, and never with a wildcard against a
-> directory you have not listed first.
+Untick one row, point out the count change, re-tick it, then click
+**Confirm 7 courses**.
 
 ---
 
-## 4. Walkthrough
+## 1:10 – 1:50 — The dashboard
 
-### Step 1 — Upload (30 seconds)
-
-Choose **BS Computer Science — Morgan State University (2026-2028)**, select
-`data/samples/demo_transcript.txt`, click **Read transcript**.
-
-> **The point to make:** the upload stored nothing. The response literally says
-> `stored: false`. Nothing touches the degree audit until a human confirms it.
-
-### Step 2 — Review and confirm
-
-Seven rows appear, each marked **Read exactly** and **Not yet confirmed**.
-
-> **The point to make:** there is deliberately no "accept all" button, and the
-> backend has no bulk-accept endpoint — a test asserts one never appears. A
-> course reaches a degree audit because a person looked at it, not because a
-> regex was confident.
-
-Untick one row before confirming to show the audit change by exactly that course.
-Then click **Confirm 7 courses**.
-
-### Step 3 — Dashboard
-
-| What you should see | Value |
+| What is on screen | Value |
 |---|---|
 | Credits earned | **23.00 of 120** |
 | Credit progress | **19.2%** |
 | Degree completion % | **deliberately absent** |
-| Requirement blocks satisfied | **4 of 6** |
-| Recommended next | COSC220, COSC281, COSC349, COSC201, COSC243, … |
-| Not yet available | COSC354 (needs COSC220, COSC241), COSC352 (needs COSC220) |
+| Requirement blocks satisfied | **4 of 6 encoded** |
+| Recommended next | COSC220, COSC281, COSC349, COSC201, COSC243 |
+| Not yet available | COSC354, COSC352 (both need COSC220) |
 
-> **The point to make:** the system refuses to print a degree-completion
-> percentage. The encoded catalog is partial — six requirement blocks are
-> verified, and the ones still awaiting department clarification are *absent,
-> not failed*. A number there would be a confident lie, so there is a paragraph
-> instead. This is the most important twenty seconds of the demo.
-
-### Step 4 — Ask the advisor
-
-Click **Ask the advisor**.
+> **Say this — this is the most important 20 seconds:** "It refuses to print a
+> degree-completion percentage. Our encoded catalog is partial: six requirement
+> blocks are verified, and the ones still awaiting department clarification are
+> *absent, not failed*. A percentage there would be a confident lie, so there's a
+> paragraph explaining the gap instead."
 
 ---
 
-## 5. Five questions to ask
+## 1:50 – 2:30 — The advisor
 
-Each is answerable with no API key. Suggestion chips cover the first four.
+Click **Ask the advisor**. Use the suggestion chips; do not type if you can click.
 
-**1. "How many credits am I missing?"**
+**1. "What should I take next semester?"** — six eligible courses, each with the
+reason and how many later courses it unlocks. COSC220 leads because it unlocks
+six. Ends with what is *not* yet eligible and why.
 
-> You have earned 23.00 credits of the 120 your degree requires, so you still
-> need 97.00. That puts you 19.2% of the way through by credit count. I am not
-> giving you a 'percent of degree complete' number, because the encoded catalog
-> is incomplete and any such number would be misleading.
+**2. "What is the capital of France?"** — it refuses, says it will not guess, and
+lists what it can answer.
 
-**2. "What courses do I still need to graduate?"**
+> **Say this:** "Note the label under each answer: **Computed by the engine**.
+> No model was involved at all — that is why this demo runs with zero API keys,
+> which matters because our student credit applications are still pending. When a
+> model *is* configured the label changes to *Phrased by \<model\>*, and if its
+> reply mentions a course code outside the catalog, we throw the reply away and
+> show the engine's answer."
 
-Two outstanding blocks — Required Courses for the CS Major (10 courses, 31
-credits) and Supporting Courses (3 courses, 7 credits) — each with its options
-listed, plus the four blocks already satisfied.
-
-**3. "What should I take next semester?"**
-
-Six eligible courses, each with the reason it is recommended and how many later
-courses it unlocks. COSC220 leads because it unlocks six. Ends with the two
-courses that are *not* yet eligible and what they are waiting on.
-
-**4. "Have I completed my major requirements?"**
-
-> Not yet. These major blocks are still outstanding: Required Courses for
-> Computer Science Major: 10 course(s), 31 credit(s) to go.
-
-**5. "Why is COSC 220 recommended?"**
-
-> - required by 1 unfinished requirement: major_required_courses
-> - unlocks 6 later course(s): COSC352, COSC354, COSC385, COSC460
-> - You meet every prerequisite for it now.
->
-> Every line above comes from the catalog's prerequisite graph and requirement
-> blocks, not from a language model's opinion.
-
-### Two more worth showing
-
-**"What is the capital of France?"** — it refuses, says it will not guess, and
-lists what it *can* answer.
-
-**"Why is COSC 999 recommended?"** — COSC 999 does not exist:
-
-> COSC999 is not on your recommendation list, so I have no engine-derived reason
-> to give you for it. **I will not invent one.**
-
-That refusal is the thesis of the project in one sentence.
+If time is short, drop question 1 and keep the refusal.
 
 ---
 
-## 6. Why no API key is needed
+## 2:30 – 3:00 — The code
 
-Every answer above is assembled by a deterministic engine from the student's
-confirmed record and the encoded catalog. When a model *is* configured, it is
-handed those facts plus the finished answer and asked only to reword it — and if
-its reply mentions a course code that is not in the catalog, the reply is thrown
-away and the engine's answer is shown instead.
+Open `backend/tests/test_no_llm_in_engine.py` on screen.
 
-So the label under every answer matters:
+> **Say this:** "The claim is only credible if it's enforced mechanically. This
+> test parses the import graph of `app/catalog/` and `app/audit/` and fails the
+> build if anyone imports the AI layer into them. A second test does the same for
+> `app/advisor/facts.py` and `answers.py`, which is what guarantees the no-key
+> path keeps working. The comment in it says: if this test fails, don't add an
+> exception — move the code."
 
-- **"Computed by the engine"** — deterministic text, no model involved.
-- **"Phrased by \<model\>"** — a model reworded it; every number and course code
-  still came from the engine.
+Close on the numbers:
 
-Full design: [docs/advisor.md](docs/advisor.md).
-
-To have a model phrase the answers, set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY`
-in `backend/.env`, or run Ollama locally (`ollama pull llama3.1`, then
-`LLM_PROVIDER=ollama`) and restart the backend.
+> "604 tests pass. CI runs them on Python 3.11 and 3.14 and builds the frontend
+> on Node 22 and 24, on every pull request. Six pull requests merged; `main` runs
+> the whole thing from a fresh clone."
 
 ---
 
-## 7. Known limitations
-
-State these before being asked.
-
-1. **No live LLM provider has ever been called.** This repository has never run
-   against a real Anthropic, OpenAI, Gemini or Ollama endpoint — both student
-   credit applications were still pending. The four provider integrations are
-   tested against a local server that speaks their documented request and
-   response shapes, and every failure path is covered, but *"a real key works"*
-   is unverified. The engine path — what the demo shows — is fully tested.
-2. **The encoded catalog is partial.** Six requirement blocks are verified
-   against the 2026-2028 Morgan State catalog. Ten open questions for the
-   department are in [`docs/catalog-open-questions.md`](docs/catalog-open-questions.md),
-   including six internal contradictions found in the published catalog. Missing
-   requirements are absent, not failed, and the system says so everywhere.
-3. **No voice input.** Web Speech API was in the plan and is not built. The
-   "multimodal" claim rests on text and PDF ingestion.
-4. **Scanned/photographed transcripts need an API key.** Text and text-layer PDFs
-   parse deterministically with no key; a scan returns a 415 naming the reason.
-5. **Chat history is in memory.** It is lost on restart and would need a shared
-   store if the backend ever ran multi-worker.
-6. **Nothing is deployed.** Everything is localhost; there is no URL to share.
-7. **A 404 appears in the browser console on sign-in.** Expected: the app asks
-   `/students/{id}/record` to decide whether to show Upload or the Dashboard, and
-   a new account has no record yet. Nothing is broken.
-
----
-
-## 8. If something goes wrong mid-demo
+## If it breaks
 
 | Symptom | Fix |
 |---|---|
-| "Cannot reach the backend" | Backend is not running, or died. Restart it; confirm `/health`. |
-| Signed out unexpectedly | `JWT_SECRET` is unset and the backend restarted. Sign in again. |
-| Port already in use | Windows: `netstat -ano \| findstr :8000` then `taskkill /PID <pid> /F`. macOS/Linux: `lsof -ti:8000 \| xargs kill`. |
-| Backend serving stale behaviour | uvicorn's `--reload` watcher goes stale on route changes. Restart it manually. |
-| Advisor says "running on the degree engine" | Not a fault. That is the no-key mode and the answers are correct. |
-| Scanned PDF rejected | Expected without an API key. Use `demo_transcript.txt`. |
+| "Cannot reach the backend" | Backend died. Restart it, confirm `/health`, refresh. |
+| Signed out unexpectedly | `JWT_SECRET` unset and backend restarted. Sign in again. |
+| Port in use | `netstat -ano \| findstr :8000` then `taskkill /PID <pid> /F` |
+| Advisor says it is "running on the degree engine" | **Not a fault.** That is the no-key mode and the answers are correct. |
+| A 404 in the browser console at sign-in | **Expected.** The app probes `/students/{id}/record` to pick Upload vs Dashboard. |
 
----
-
-## 9. One-paragraph summary for the professor
-
-> The degree audit is computed by a deterministic Python rules engine from the
-> real Morgan State 2026-2028 catalog, encoded as validated YAML. A language
-> model cannot compute any part of it; an architectural test walks the import
-> graph and fails the build if the AI layer is imported into the catalog or
-> audit packages. Transcript data is extracted with provenance and cannot reach
-> the audit until the student confirms it row by row. The conversational advisor
-> answers from the engine's output and, where a model is configured, is allowed
-> only to rephrase that answer — and any reply that mentions a course outside the
-> catalog is discarded. Where the catalog is incomplete, the system refuses to
-> report a completion percentage rather than estimate one.
+Full troubleshooting: [`docs/demo-reference.md`](docs/demo-reference.md).

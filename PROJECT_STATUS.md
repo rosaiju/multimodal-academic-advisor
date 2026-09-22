@@ -165,7 +165,7 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   "multimodal" claim rests on text and PDF parsing.
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
-  question in DEMO_GUIDE.md is answered correctly with no provider configured.
+  question in docs/demo-reference.md is answered correctly with no provider configured.
 
 ### Unfinished — housekeeping
 

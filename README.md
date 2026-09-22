@@ -15,7 +15,8 @@ degree progress, course selection, and student concerns.
 
 `main` has everything: backend, frontend, degree engine and the conversational
 advisor. Clone it and follow [Setup](#setup), or read **[DEMO_GUIDE.md](DEMO_GUIDE.md)**
-for a scripted walkthrough.
+for the timed 3-minute demo script — with
+[`docs/demo-reference.md`](docs/demo-reference.md) as the long-form backup.
 
 ```bash
 git clone https://github.com/rosaiju/multimodal-academic-advisor.git
@@ -301,7 +302,7 @@ The same data is served read-only over HTTP:
 |---|---|---|
 | 0 | Repo, config, catalog schema + loader, `AuditResult` contract | **Done** |
 | 0.5 | Requirements explorer, catalog router, `doctor` CLI | **Done** |
-| 1 | Morgan COSC catalog (37 courses + prereq graph) | **Done** |
+| 1 | Morgan COSC catalog (56 courses, 41 COSC, + prereq graph) | **Done** |
 | 1 | Audit engine, optimal matcher, prereq DAG | **Done** (PR #3/#4) |
 | 1 | Transcript ingestion: text, PDF, DegreeWorks, vision | **Done** (PR #3) |
 | 1 | Accounts, sign-in, per-student authorisation | **Done** (PR #5) |
@@ -312,7 +313,7 @@ The same data is served read-only over HTTP:
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript
 or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps and
-recommendations → ask the advisor questions about it. 602 backend tests pass, and
+recommendations → ask the advisor questions about it. 604 backend tests pass, and
 the whole path is verified in a real browser.
 
 **What does not exist yet:** voice input. The "multimodal" claim rests on text and

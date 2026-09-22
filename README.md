@@ -11,29 +11,19 @@ degree progress, course selection, and student concerns.
 
 ---
 
-## ⚠️ Read this first: which branch has the app?
+## Quick start
 
-**`main` does not contain the application.** It has the backend catalog layer only —
-no `frontend/`, no transcript ingestion, no degree audit endpoints, no sign-in.
-
-If you cloned the repo and wondered where everything was, this is why. Cloning
-succeeded; you just landed on a branch that predates most of the project.
+`main` has everything: backend, frontend, degree engine and the conversational
+advisor. Clone it and follow [Setup](#setup), or read **[DEMO_GUIDE.md](DEMO_GUIDE.md)**
+for a scripted walkthrough.
 
 ```bash
 git clone https://github.com/rosaiju/multimodal-academic-advisor.git
 cd multimodal-academic-advisor
-git checkout feature/frontend      # <-- the branch that runs end to end
 ```
 
-| Branch | Contains | PR |
-|---|---|---|
-| `main` | Catalog layer + `doctor` CLI only. **Cannot run the demo.** | — |
-| `feature/transcript-ingestion` | Adds ingestion + audit endpoints | #3 (open) |
-| `feature/advising-engine` | Adds prereq graph + recommendations | #4 (open, → #3) |
-| **`feature/frontend`** | **Everything, including the React UI. Use this one.** | none yet |
-
-The branches are *stacked*: #4 targets #3, and `feature/frontend` sits on top of both.
-Until they land on `main`, `feature/frontend` is the only complete checkout.
+**No API key is needed.** The degree audit and the advisor both work with no
+model configured - see [The core design decision](#the-core-design-decision).
 
 ---
 
@@ -79,12 +69,11 @@ separate processes in separate terminals.
 > wheels. **Do not downgrade Python** to make an install work — if `pip install`
 > fails, the cause is something else and downgrading will cost you a day.
 
-### 1. Clone and pick the branch
+### 1. Clone
 
 ```bash
 git clone https://github.com/rosaiju/multimodal-academic-advisor.git
 cd multimodal-academic-advisor
-git checkout feature/frontend
 ```
 
 ### 2. Backend
@@ -145,7 +134,7 @@ sudo apt install python3-venv
 Verify:
 
 ```bash
-pytest -q          # 533 tests on feature/frontend
+pytest -q          # 602 tests
 ```
 
 ### 3. Frontend
@@ -243,7 +232,7 @@ just removed, because it remains in the git history.
 
 | Symptom | Cause and fix |
 |---|---|
-| `frontend/` doesn't exist | You're on `main`. `git checkout feature/frontend`. |
+| The advisor says "running on the degree engine" | Expected with no API key. Answers are still correct - they are computed, not generated. Set `GEMINI_API_KEY` (or run Ollama) to have a model phrase them. |
 | PDF upload fails, tests pass | Installed without the `ingestion` extra. Re-run `pip install -e ".[dev,ingestion]"`. |
 | A `.env` value has no effect | The file is at the repo root. It must be `backend/.env`. |
 | Signed out after every restart | `JWT_SECRET` unset, so the key is regenerated per process. Set it in `backend/.env`. |
@@ -315,19 +304,25 @@ The same data is served read-only over HTTP:
 | 1 | Morgan COSC catalog (37 courses + prereq graph) | **Done** |
 | 1 | Audit engine, optimal matcher, prereq DAG | **Done** (PR #3/#4) |
 | 1 | Transcript ingestion: text, PDF, DegreeWorks, vision | **Done** (PR #3) |
-| 1 | Accounts, sign-in, per-student authorisation | **Done** (unmerged) |
-| 1 | React frontend: upload → review → dashboard | **Done** (unmerged) |
-| 1 | **Conversational advisor (tool-calling loop)** | **Not started** |
+| 1 | Accounts, sign-in, per-student authorisation | **Done** (PR #5) |
+| 1 | React frontend: upload → review → dashboard | **Done** (PR #5) |
+| 1 | **Conversational advisor** | **Done** — see [docs/advisor.md](docs/advisor.md) |
 | 2 | **Voice input (Web Speech API)** | **Not started** |
 | 3 | What-if simulation, multi-term planning | Not started |
 
-**What runs end to end today** on `feature/frontend`: register → sign in → upload a
-DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps and
-recommendations. 533 backend tests pass.
+**What runs end to end today** on `main`: register → sign in → upload a transcript
+or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps and
+recommendations → ask the advisor questions about it. 602 backend tests pass, and
+the whole path is verified in a real browser.
 
-**What does not exist yet:** the conversational advisor (`app/advisor/` is an empty
-package and the chat router is commented out in `main.py`) and voice input. The
-"multimodal" claim currently rests on PDF parsing alone.
+**What does not exist yet:** voice input. The "multimodal" claim rests on text and
+PDF parsing; vision extraction of scanned documents is implemented but needs an
+API key to run.
+
+**Not yet verified:** no live LLM provider has ever been called - this machine has
+no key and no Ollama. The advisor answers from the degree engine, which is the
+supported mode, and the model-phrasing path is tested only against a local stub.
+See [docs/advisor.md](docs/advisor.md#what-is-not-tested).
 
 See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the detailed handover, known bugs,
 and the reasoning behind decisions that look wrong but are not.
@@ -341,8 +336,12 @@ backend/app/
   catalog/     Degree requirements: YAML schema, loader, registry.   NO LLM.
   audit/       The rules engine: blocks, matcher, prereq DAG.        NO LLM.
   ingestion/   PDF and image transcript extraction + validation.
-  llm/         Provider-neutral LLM interface (Anthropic / OpenAI).
-  advisor/     Conversation, tool-calling loop, wellbeing triage.    (empty)
+  llm/         Provider-neutral model access: vision (provider.py) and
+               chat (chat.py). Anthropic / OpenAI / Gemini / Ollama.
+  advisor/     The conversational advisor. facts.py computes the grounding
+               from the audit, answers.py writes the answer with NO model,
+               chat.py optionally has a model rephrase it and checks the
+               result. See docs/advisor.md.
   auth/        Accounts, password hashing, tokens.
   schemas/     Pydantic contracts shared across the whole system.
 data/catalog/  The degree catalogs themselves. Source of truth.

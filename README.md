@@ -53,8 +53,8 @@ A missing or expired API key cannot break the core demo.
 
 ## Setup
 
-You need **two** things running: a Python backend and a Node frontend. They are
-separate processes in separate terminals.
+You need **two** things running: a Python backend and a Node frontend. They run as
+separate processes; use the `mprocs` launcher below to manage both from one terminal.
 
 ### Prerequisites
 
@@ -63,6 +63,7 @@ separate processes in separate terminals.
 | Python | 3.11 – 3.14 | `python --version` |
 | Node.js | 18+ | `node --version` |
 | Git | any recent | `git --version` |
+| mprocs | 0.9+ | `mprocs --version` |
 
 > **Python version:** the project supports `>=3.11,<3.15` and the team develops on
 > **3.14.4**. Every dependency, `pdfplumber` and `pymupdf` included, publishes cp314
@@ -145,9 +146,23 @@ npm install
 npm run dev
 ```
 
-### 4. Run both
+### 4. Run both with one command
 
-Two terminals, from the repo root.
+Install [mprocs](https://github.com/pvolok/mprocs) once, then from the repo root run:
+
+```bash
+mprocs
+```
+
+The project-level `mprocs.yaml` starts the backend and frontend in separate panes.
+Press `q` to stop both and quit. Open **<http://localhost:5173>**.
+
+On Windows, install mprocs with `winget install --id pvolok.mprocs --exact` (or
+`scoop install mprocs`).
+
+### Manual startup (without mprocs)
+
+From the repo root, start each command in its own terminal.
 
 **Terminal 1 — backend:**
 

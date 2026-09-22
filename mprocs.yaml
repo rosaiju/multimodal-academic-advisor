@@ -1,0 +1,13 @@
+procs:
+  backend:
+    cmd:
+      $select: os
+      windows: [".venv/Scripts/python.exe", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]
+      $else: [".venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]
+    cwd: <CONFIG_DIR>/backend
+  frontend:
+    cmd:
+      $select: os
+      windows: ["npm.cmd", "run", "dev"]
+      $else: ["npm", "run", "dev"]
+    cwd: <CONFIG_DIR>/frontend

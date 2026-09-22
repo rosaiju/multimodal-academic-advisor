@@ -21,14 +21,30 @@ class Settings(BaseSettings):
     # --- LLM provider ---
     # Provider-neutral on purpose: the team applies for Anthropic AND OpenAI student
     # credits, then flips this one value to whichever came through.
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "gemini", "ollama"] = "anthropic"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    gemini_api_key: str = ""
 
     anthropic_chat_model: str = "claude-haiku-4-5-20251001"
     anthropic_vision_model: str = "claude-sonnet-5"
     openai_chat_model: str = "gpt-4o-mini"
     openai_vision_model: str = "gpt-4o"
+    gemini_chat_model: str = "gemini-2.0-flash"
+    gemini_vision_model: str = "gemini-2.0-flash"
+
+    #: Ollama runs locally and needs no key, which makes it the fallback that
+    #: works on a laptop with no credits at all. Availability is decided by
+    #: reaching the server, not by a setting - see `ChatProvider.available()`.
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_chat_model: str = "llama3.1"
+    #: Seconds. A local model on CPU is slow; a demo that hangs is worse than one
+    #: that says the model timed out.
+    ollama_timeout_seconds: float = 60.0
+
+    #: Turns of conversation kept per session. Bounded so a long chat cannot grow
+    #: the prompt without limit.
+    advisor_history_turns: int = 12
 
     #: Hard ceiling so a runaway tool-calling loop cannot burn the team's credits.
     max_tokens_per_session: int = 50_000
@@ -95,9 +111,32 @@ class Settings(BaseSettings):
     @property
     def llm_configured(self) -> bool:
         """False is fine. The dashboard and degree audit work with zero LLM calls,
-        so an unconfigured or expired key can never break the core demo."""
-        key = self.anthropic_api_key if self.llm_provider == "anthropic" else self.openai_api_key
-        return bool(key)
+        so an unconfigured or expired key can never break the core demo.
+
+        Ollama reports True because it needs no credential; whether it is actually
+        running is a question only a request can answer, and `/advisor/health`
+        asks it.
+        """
+        return bool(self.chat_api_key) or self.llm_provider == "ollama"
+
+    @property
+    def chat_api_key(self) -> str:
+        """The key for the selected provider. Empty for ollama, which needs none."""
+        return {
+            "anthropic": self.anthropic_api_key,
+            "openai": self.openai_api_key,
+            "gemini": self.gemini_api_key,
+            "ollama": "",
+        }[self.llm_provider]
+
+    @property
+    def chat_model(self) -> str:
+        return {
+            "anthropic": self.anthropic_chat_model,
+            "openai": self.openai_chat_model,
+            "gemini": self.gemini_chat_model,
+            "ollama": self.ollama_chat_model,
+        }[self.llm_provider]
 
 
 @lru_cache

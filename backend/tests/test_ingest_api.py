@@ -8,7 +8,6 @@ that course. If those two ever collapse into one endpoint, these tests fail.
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.ingestion.extractor import (
@@ -33,18 +32,6 @@ TRANSCRIPT = (
 PROGRAM = "morgan_cosc_bs_2026_2028"
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    """A client whose student records land in a throwaway directory."""
-    monkeypatch.setenv("STUDENT_RECORD_DIR", str(tmp_path))
-    get_settings.cache_clear()
-    from app.main import app
-
-    with TestClient(app) as c:
-        yield c
-    get_settings.cache_clear()
-
-
 def upload(client, data: bytes = TRANSCRIPT, name: str = "jane.txt", program: str | None = PROGRAM):
     payload = {"program_id": program} if program else {}
     return client.post(
@@ -62,7 +49,7 @@ class TestUploadStoresNothing:
 
     def test_upload_creates_no_record(self, client) -> None:
         upload(client)
-        assert client.get("/students/jane/record").status_code == 404
+        assert client.get("/students/{me}/record").status_code == 404
 
     def test_every_returned_row_is_unverified(self, client) -> None:
         rows = upload(client).json()["extraction"]["courses"]
@@ -101,7 +88,6 @@ class TestConfirmFlow:
         response = client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "program_id": PROGRAM,
                 "source_name": "jane.txt",
                 "extractor": "text-parser",
@@ -111,7 +97,7 @@ class TestConfirmFlow:
         assert response.status_code == 200
         assert response.json()["confirmed_now"] == 1
 
-        stored = client.get("/students/jane/record").json()
+        stored = client.get("/students/{me}/record").json()
         assert [c["course"]["code"] for c in stored["confirmed"]] == ["COSC111"]
 
     def test_stored_courses_are_student_confirmed(self, client) -> None:
@@ -119,13 +105,12 @@ class TestConfirmFlow:
         client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "source_name": "jane.txt",
                 "extractor": "text-parser",
                 "courses": [{"extracted": r} for r in rows],
             },
         )
-        stored = client.get("/students/jane/record").json()
+        stored = client.get("/students/{me}/record").json()
         assert all(
             c["course"]["provenance"] == Provenance.STUDENT_CONFIRMED.value
             for c in stored["confirmed"]
@@ -136,7 +121,6 @@ class TestConfirmFlow:
         response = client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "source_name": "jane.txt",
                 "extractor": "text-parser",
                 # The extracted row goes back untouched; the fix travels beside it.
@@ -144,7 +128,7 @@ class TestConfirmFlow:
             },
         )
         assert response.json()["corrected"] == ["COSC111"]
-        stored = client.get("/students/jane/record").json()
+        stored = client.get("/students/{me}/record").json()
         assert stored["confirmed"][0]["course"]["grade"] == "B"
         assert stored["confirmed"][0]["corrections"][0]["extracted"] == "A"
 
@@ -155,7 +139,6 @@ class TestConfirmFlow:
         response = client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "source_name": "jane.txt",
                 "extractor": "text-parser",
                 "courses": [{"extracted": row}],
@@ -168,7 +151,6 @@ class TestConfirmFlow:
         response = client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "source_name": "x",
                 "extractor": "text-parser",
                 "courses": [],
@@ -176,7 +158,14 @@ class TestConfirmFlow:
         )
         assert response.status_code == 400
 
-    def test_unsafe_student_id_is_rejected(self, client) -> None:
+    def test_a_student_id_in_the_body_is_ignored(self, client) -> None:
+        """It used to decide which record was written. Now the token does.
+
+        A body field naming the destination record was both an authorisation hole
+        and a path-traversal surface: "../escape" had to be caught by the store's
+        filename guard because it reached the store at all. Neither is reachable
+        now - the value is simply not read.
+        """
         rows = upload(client).json()["extraction"]["courses"]
         response = client.post(
             "/ingest/confirm",
@@ -187,13 +176,24 @@ class TestConfirmFlow:
                 "courses": [{"extracted": rows[0]}],
             },
         )
-        assert response.status_code == 400
-        assert "unsafe student id" in response.json()["detail"]
+        assert response.status_code == 200
+        assert response.json()["student_id"] == client.student_id
+
+    def test_the_record_lands_on_the_signed_in_account(self, client) -> None:
+        rows = upload(client).json()["extraction"]["courses"]
+        client.post(
+            "/ingest/confirm",
+            json={
+                "source_name": "jane.txt",
+                "extractor": "text-parser",
+                "courses": [{"extracted": rows[0]}],
+            },
+        )
+        assert client.get("/students/{me}/record").status_code == 200
 
     def test_reupload_does_not_duplicate(self, client) -> None:
         rows = upload(client).json()["extraction"]["courses"]
         payload = {
-            "student_id": "jane",
             "source_name": "jane.txt",
             "extractor": "text-parser",
             "courses": [{"extracted": r} for r in rows],
@@ -212,14 +212,13 @@ class TestRecordEndpoints:
         client.post(
             "/ingest/confirm",
             json={
-                "student_id": "jane",
                 "source_name": "jane.txt",
                 "extractor": "text-parser",
                 "courses": [{"extracted": r} for r in rows],
             },
         )
-        assert client.delete("/students/jane/record").status_code == 200
-        assert client.get("/students/jane/record").status_code == 404
+        assert client.delete("/students/{me}/record").status_code == 200
+        assert client.get("/students/{me}/record").status_code == 404
 
     def test_delete_missing_record_is_404(self, client) -> None:
         assert client.delete("/students/nobody/record").status_code == 404

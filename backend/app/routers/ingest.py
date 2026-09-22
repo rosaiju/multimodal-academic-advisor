@@ -19,6 +19,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from app.auth.dependencies import AuthorisedStudentId, CurrentUser
 from app.catalog.loader import CatalogError
 from app.catalog.registry import registry
 from app.config import get_settings
@@ -76,7 +77,13 @@ class ConfirmItem(BaseModel):
 
 
 class ConfirmRequest(BaseModel):
-    student_id: str
+    """Note what is absent: there is no student_id.
+
+    It used to be a body field, which meant any caller could name the record their
+    confirmation landed in. It now comes from the access token, so a request can
+    only ever write to the account that made it.
+    """
+
     program_id: str | None = None
     source_name: str
     extractor: str
@@ -96,10 +103,15 @@ class ConfirmResponse(BaseModel):
 
 @router.post("/ingest/transcript", response_model=UploadResponse)
 async def upload_transcript(
+    user: CurrentUser,
     file: Annotated[UploadFile, File()],
     program_id: Annotated[str | None, Form()] = None,
 ) -> UploadResponse:
     """Read a transcript and return what was found. Stores nothing.
+
+    Sign-in is required even though nothing is written. Reading a PDF costs real
+    work, and an unauthenticated endpoint that parses uploaded documents is an
+    invitation. The extraction is returned to the caller and kept nowhere.
 
     `program_id` is optional and is used only to CHECK course codes against the
     catalog, never to correct them.
@@ -129,7 +141,7 @@ async def upload_transcript(
 
 
 @router.post("/ingest/confirm", response_model=ConfirmResponse)
-def confirm_courses(request: ConfirmRequest) -> ConfirmResponse:
+def confirm_courses(request: ConfirmRequest, user: CurrentUser) -> ConfirmResponse:
     """Accept specific rows onto a student's record.
 
     Each row is promoted to STUDENT_CONFIRMED individually. A row still missing a
@@ -159,7 +171,7 @@ def confirm_courses(request: ConfirmRequest) -> ConfirmResponse:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        record = _store().add_courses(request.student_id, confirmed, program_id=request.program_id)
+        record = _store().add_courses(user.student_id, confirmed, program_id=request.program_id)
     except StoredRecordError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -172,7 +184,7 @@ def confirm_courses(request: ConfirmRequest) -> ConfirmResponse:
 
 
 @router.get("/students/{student_id}/record", response_model=StoredRecord)
-def get_record(student_id: str) -> StoredRecord:
+def get_record(student_id: AuthorisedStudentId) -> StoredRecord:
     """Everything confirmed for one student, with its full audit trail."""
     try:
         return _store().load(student_id)
@@ -181,7 +193,7 @@ def get_record(student_id: str) -> StoredRecord:
 
 
 @router.delete("/students/{student_id}/record")
-def delete_record(student_id: str) -> dict[str, object]:
+def delete_record(student_id: AuthorisedStudentId) -> dict[str, object]:
     """Delete a student's confirmed coursework."""
     try:
         deleted = _store().delete(student_id)

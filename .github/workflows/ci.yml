@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # Not just [main]. PRs in this project are STACKED -- PR #4 targets
+  # feature/transcript-ingestion, not main -- and a `branches` filter matches the
+  # PR's BASE. Filtering on main alone meant a stacked PR merged with no CI run at
+  # all, silently: a green-looking PR that was never tested. `**` covers every base.
   pull_request:
-    branches: [main]
+    branches: ['**']
 
 # A second push to the same PR cancels the older run instead of queueing behind it.
 concurrency:
@@ -14,6 +18,13 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # CI used to test 3.12 alone while the team develops on 3.14, so a green tick
+    # said nothing about the interpreter anyone actually runs. Both ends of the
+    # supported range (`requires-python = ">=3.11,<3.15"`) now run.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
     defaults:
       run:
         working-directory: backend
@@ -23,7 +34,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies
@@ -40,6 +51,48 @@ jobs:
 
       - name: Tests
         run: pytest -q
+
+  # The frontend had no CI at all until now: the branch whose whole purpose is
+  # adding a frontend could go green without anyone knowing it still compiled.
+  # A clean `npm ci` also exercises package-lock.json, which nothing had checked.
+  frontend:
+    runs-on: ubuntu-latest
+    # Node 22 is LTS; 24 is what the team actually runs. Same reasoning as the
+    # Python matrix above - testing only one says nothing about the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["22", "24"]
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        # ci, not install: it installs the locked tree exactly and fails on a
+        # lockfile that has drifted from package.json, instead of quietly
+        # resolving something newer than anyone has run locally.
+        run: npm ci
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Tests
+        # There is no frontend test suite yet. --if-present makes this a no-op
+        # now and a real step the moment someone adds a `test` script, rather
+        # than a placeholder that has to be remembered.
+        run: npm run test --if-present
 
   # Blocks a PR that would commit a real .env or a credential. Cheap insurance:
   # a secret pushed to a shared repo has to be rotated, not just deleted.

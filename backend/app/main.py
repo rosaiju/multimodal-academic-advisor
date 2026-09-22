@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.catalog.registry import registry
 from app.config import get_settings
 from app.routers import audit as audit_router
+from app.routers import auth as auth_router
 from app.routers import catalog as catalog_router
 from app.routers import ingest as ingest_router
 
@@ -62,6 +63,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Without this a browser cannot READ Retry-After on a 429, even though the
+    # server sent it. In development the Vite proxy makes requests same-origin
+    # and CORS never applies; in production it would.
+    expose_headers=["Retry-After"],
 )
 
 
@@ -77,6 +82,9 @@ def health() -> dict[str, object]:
         "programs": [p.program_id for p in registry.list_programs()],
         "llm_provider": settings.llm_provider,
         "llm_configured": settings.llm_configured,
+        # A restart invalidates every token when no secret is configured, so
+        # say so rather than letting the team debug mysterious sign-outs.
+        "auth_secret_is_ephemeral": settings.jwt_secret_is_ephemeral,
         # Which transcript formats actually work right now. Without a configured
         # provider the vision reader is absent and scans cannot be processed,
         # which is worth surfacing rather than discovering on a 415.
@@ -102,6 +110,8 @@ def list_programs() -> list[dict[str, object]]:
     ]
 
 
+# Auth first: everything below it is reachable only with a token from here.
+app.include_router(auth_router.router)
 app.include_router(catalog_router.router)
 app.include_router(ingest_router.router)
 app.include_router(audit_router.router)

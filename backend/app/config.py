@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -39,12 +40,53 @@ class Settings(BaseSettings):
     #: One JSON file per student. Files rather than a table so a person can open
     #: a record and see exactly what the system believes and where it came from.
     student_record_dir: Path = BACKEND_DIR / "student_records"
+    #: One JSON file per account, alongside the records.
+    user_dir: Path = BACKEND_DIR / "accounts"
     #: Transcripts are small. This is a guard against a memory-exhausting upload,
     #: not a policy about document length.
     max_upload_bytes: int = 5 * 1024 * 1024
 
+    # --- Authentication ---
+    #: Signs access tokens. MUST be set in production - see `jwt_signing_secret`,
+    #: which generates a throwaway value when this is empty so a fresh checkout
+    #: runs without anyone inventing a secret to paste into a config file.
+    #: There is deliberately no default value here: a committed default secret is
+    #: a committed credential, and every deployment would share it.
+    jwt_secret: str = ""
+    #: Hours, not weeks. These tokens are stateless and cannot be revoked before
+    #: they expire, so the lifetime IS the revocation window.
+    access_token_ttl_minutes: int = 12 * 60
+
+    #: Failed logins from one client against one address before a cooldown starts.
+    #: Generous enough that a person mistyping their password never notices.
+    login_max_failures: int = 5
+    #: First cooldown. Doubles on each subsequent lockout for the same pair.
+    login_cooldown_seconds: int = 30
+    #: The ceiling on that doubling. Capped so a lockout is never permanent.
+    login_cooldown_max_seconds: int = 900
+    #: An idle pair is forgotten after this, clearing its history entirely.
+    login_forget_after_seconds: int = 900
+
     # --- Web ---
     cors_origins: str = "http://localhost:5173"
+
+    @property
+    def jwt_signing_secret(self) -> str:
+        """The configured secret, or a random one generated for this process.
+
+        Falling back to a random value rather than a constant means an unconfigured
+        deployment is inconvenient - everyone is signed out when it restarts - but
+        never insecure, which is the right way round. A hardcoded fallback would be
+        a published signing key.
+        """
+        if self.jwt_secret:
+            return self.jwt_secret
+        return _ephemeral_secret()
+
+    @property
+    def jwt_secret_is_ephemeral(self) -> bool:
+        """True when no secret was configured. Surfaced on /health as a warning."""
+        return not self.jwt_secret
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -56,6 +98,12 @@ class Settings(BaseSettings):
         so an unconfigured or expired key can never break the core demo."""
         key = self.anthropic_api_key if self.llm_provider == "anthropic" else self.openai_api_key
         return bool(key)
+
+
+@lru_cache
+def _ephemeral_secret() -> str:
+    """One random secret per process, created on first use."""
+    return secrets.token_urlsafe(48)
 
 
 @lru_cache

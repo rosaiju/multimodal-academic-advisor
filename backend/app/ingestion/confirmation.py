@@ -46,6 +46,12 @@ class ConfirmedCourse(BaseModel):
     source_name: str = Field(description="Which document this came from")
     extractor: str
     raw_line: str = Field(description="The transcript line, kept for disputes")
+    source_reference: str | None = Field(
+        default=None,
+        description="The document's 'Satisfied by' text. Two block-transfer rows can "
+        "share a code, term, grade, credits AND raw line; this is the only thing that "
+        "tells them apart, so the record keeps it.",
+    )
     corrections: list[Correction] = Field(default_factory=list)
 
     @property
@@ -72,6 +78,17 @@ def confirm_course(
     one keeps the extracted value - and if that value is missing, this raises
     rather than inventing a default, because a guessed grade decides a degree.
     """
+    if extracted.is_placeholder:
+        # Checked against the EXTRACTED row, not the corrected one, and deliberately
+        # so. A summary line stays a summary line however it is edited: typing a
+        # grade into "TRANSFER OF 24 CREDITS" does not make it a course, it makes
+        # those 24 credits count twice - once here and once as the rows below it.
+        raise ConfirmationError(
+            f"{extracted.code}: this row is a summary line, not a course - it carries "
+            "no grade and no credit hours, and the credit it totals is listed "
+            "separately. It cannot be confirmed, only left out."
+        )
+
     corrections: list[Correction] = []
     for name, supplied, original in (
         ("term", term, extracted.term),
@@ -120,6 +137,7 @@ def confirm_course(
         source_name=result.source_name,
         extractor=result.extractor,
         raw_line=extracted.raw_line,
+        source_reference=extracted.source_reference,
         corrections=corrections,
     )
 

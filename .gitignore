@@ -30,4 +30,6 @@ Thumbs.db
 
 # Student records written at runtime (per-student JSON).
 backend/student_records/
+# Account files hold email addresses and password hashes. Never commit them.
+backend/accounts/
 backend/uploads/

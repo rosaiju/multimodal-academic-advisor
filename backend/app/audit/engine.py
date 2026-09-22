@@ -36,6 +36,8 @@ from app.audit.evaluators import (
 from app.audit.optimal import SLOT_BLOCKS, assign_optimally
 from app.audit.record import StudentRecord
 from app.catalog.schema import (
+    IN_PROGRESS_GRADES,
+    NON_PASSING,
     AllOfBlock,
     CreditsFromBlock,
     EachOfBlock,
@@ -51,7 +53,23 @@ from app.schemas.audit import (
     GpaSummary,
     MatcherStrategy,
     RequirementBlockResult,
+    UnrecognisedCourse,
 )
+
+
+def _is_passing(grade: str) -> bool:
+    """True for a grade that earned its credit.
+
+    Uses the catalog's own NON_PASSING set rather than a second list, so "does this
+    count" has exactly one answer in this codebase.
+    """
+    return grade.strip().upper().rstrip("+-") not in NON_PASSING
+
+
+def _is_in_progress(grade: str) -> bool:
+    """Registered but unfinished. Credit attempted, none earned."""
+    return grade.strip().upper() in IN_PROGRESS_GRADES
+
 
 #: Blocks that decide from the whole record rather than by consuming courses.
 _RECORD_SCOPED = (GpaBlock, ResidencyBlock)
@@ -175,13 +193,43 @@ def run_audit(
         and completed[i].code not in used_codes
     ]
 
+    # Credit the catalog does not name - overwhelmingly transfer work. Reported so
+    # the totals reconcile with the student's own audit, never applied: deciding
+    # that an outside course satisfies a requirement is an evaluator's job.
+    outside_catalog = [
+        UnrecognisedCourse(
+            code=c.code,
+            term=c.term,
+            grade=c.grade,
+            credits=c.credits,
+            institution=c.institution,
+            provenance=c.provenance,
+        )
+        for c in completed
+        if c.is_trusted and program.course(c.code) is None
+    ]
+
+    # EARNED is every trusted passing credit on the record, catalog or not. It is a
+    # different quantity from total_applied, which counts only what landed in an
+    # encoded block, and conflating the two is what showed a student with 150
+    # credits as 45% done.
+    earned = sum(
+        (c.credits for c in completed if c.is_trusted and _is_passing(c.grade)),
+        Decimal(0),
+    )
+    in_progress_credits = sum(
+        (c.credits for c in completed if c.is_trusted and _is_in_progress(c.grade)),
+        Decimal(0),
+    )
+
     return AuditResult(
         student_id=record.student_id,
         program_id=program.program_id,
         catalog_year=program.catalog_year,
         total_credits_required=program.total_credits_required,
         total_credits_applied=total_applied,
-        total_credits_in_progress=Decimal(0),
+        total_credits_earned=earned,
+        total_credits_in_progress=in_progress_credits,
         gpa=GpaSummary(
             cumulative=gpa_points(trusted),
             major=gpa_points(major_courses),
@@ -190,6 +238,7 @@ def run_audit(
         ),
         blocks=blocks,
         unapplied=unapplied,
+        outside_catalog=outside_catalog,
         critical_path_terms=None,
         critical_path=[],
         strategy=strategy,

@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 
 from app.catalog.schema import Program
+from app.ingestion.degreeworks import looks_like_degreeworks, parse_degreeworks_text
 from app.ingestion.errors import DocumentNotReadable
 from app.ingestion.models import ExtractionResult
 from app.ingestion.parser import parse_transcript_text
@@ -31,6 +32,12 @@ PDF_MAGIC = b"%PDF-"
 
 #: Below this many characters a "text layer" is stray metadata, not a transcript.
 MIN_USEFUL_CHARS = 40
+
+#: Enough text that finding no courses means we failed to read it, not that the
+#: document is empty.
+SUBSTANTIAL_TEXT = 400
+
+DEGREEWORKS_EXTRACTOR = "degreeworks-parser"
 
 
 class PdfTextUnavailable(DocumentNotReadable):
@@ -83,9 +90,39 @@ class PdfTranscriptExtractor:
         content_type: str | None = None,
     ) -> ExtractionResult:
         text = pdf_text(data)
-        result = parse_transcript_text(text, source_name=filename, program=program)
+        result = parse_document_text(text, source_name=filename, program=program)
+
+        # A PDF with plenty of text but no recognisable coursework has not been
+        # READ, it has merely been opened. Reporting "0 courses found" would tell a
+        # student their transcript is empty, which is a different and wrong claim.
+        # Declining lets a document reader try instead of ending the upload here.
+        if not result.courses and len(text.strip()) >= SUBSTANTIAL_TEXT:
+            raise DocumentNotReadable(
+                f"{filename}: this PDF has {len(text.strip())} characters of text but no "
+                "course rows in a layout we recognise. It may be an unsupported "
+                "worksheet format."
+            )
+
+        if result.extractor == DEGREEWORKS_EXTRACTOR:
+            return result
         return result.model_copy(update={"extractor": self.name})
 
 
 def looks_like_pdf(data: bytes) -> bool:
     return data[:5] == PDF_MAGIC
+
+
+def parse_document_text(
+    text: str,
+    *,
+    source_name: str,
+    program: Program | None = None,
+) -> ExtractionResult:
+    """Route text to the parser that matches its layout.
+
+    A DegreeWorks audit and a transcript are different documents with different
+    shapes, and one regex cannot read both without becoming wrong about each.
+    """
+    if looks_like_degreeworks(text):
+        return parse_degreeworks_text(text, source_name=source_name, program=program)
+    return parse_transcript_text(text, source_name=source_name, program=program)

@@ -161,13 +161,14 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   daemon has ever been exercised from this repository. The advisor runs
   engine-only, which is a supported and fully tested mode — but nobody has yet
   seen `source: "engine+llm"` come back from a real endpoint.
-- ~~**No voice input.**~~ **Built (Sep 22 2026), not yet live-verified.** Mic in
-  the advisor panel, Deepgram `nova-3` behind `POST /advisor/transcribe`, with
-  catalog course codes as keyterms. Tested against a local fake Deepgram and
-  checked end-to-end through the running app, but **no real Deepgram key has been
-  used from this repo yet**. Next: set `DEEPGRAM_API_KEY` in `backend/.env`, say
-  "What can I take after COSC 241?", and record the exact transcript here. See
-  [docs/advisor.md](docs/advisor.md#voice-input).
+- ~~**No voice input.**~~ **Built and live-verified (Sep 22 2026).** Mic in the
+  advisor panel, Deepgram `nova-3` behind `POST /advisor/transcribe`, with
+  catalog course codes as keyterms. **First call from this repo to a live
+  external service:** a synthesized WAV of "What can I take after COSC 241?" came
+  back from real Deepgram as `What can I take after COSC 241?` (confidence 0.99),
+  and Deepgram accepted all 76 keyterms. Caveat: a TTS voice pronounces "COSC"
+  cleanly, so the same result came back without keyterms; a human speaker is the
+  real test of whether they help. See [docs/advisor.md](docs/advisor.md#voice-input).
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in DEMO_GUIDE.md is answered correctly with no provider configured.

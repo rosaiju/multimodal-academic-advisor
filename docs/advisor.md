@@ -131,8 +131,11 @@ for the question box and never asks the advisor anything itself.
   a Deepgram `keyterm`, built by `app/speech/keyterms.py` from the loaded catalog.
 - **Never auto-sent.** A misheard course code should be caught by the student,
   not answered. Below 0.6 confidence the panel asks them to check it.
-- **Privacy:** audio lives in memory for one request. It is never written to
-  disk, and Deepgram is told not to keep it for training.
+- **Privacy:** audio is never saved. It exists for one request and is then
+  discarded, and Deepgram is told not to keep it for training. One caveat: the
+  web framework buffers any upload part over 1 MB in a temporary file for the
+  length of the request. A 30-second question is about 0.5 MB, so it stays in
+  memory in practice.
 - **Degrades like the model:** no `DEEPGRAM_API_KEY` means no mic button. A
   rejected key, no credit, a rate limit or a timeout means a quiet note, and
   typing still works. Deepgram's error text is logged, never shown.

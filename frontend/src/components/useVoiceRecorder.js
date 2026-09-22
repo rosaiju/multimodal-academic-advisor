@@ -12,6 +12,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *   a double-click cannot open two streams.
  * - On unmount `onstop` is detached before stopping, so a transcript can never
  *   arrive for a panel that no longer exists.
+ * - `mountedRef` covers the gap while the permission prompt is open: a panel
+ *   closed before the student answers must not start recording afterwards.
  */
 export function useVoiceRecorder({ maxSeconds = 30, onRecorded }) {
   const supported =
@@ -25,6 +27,7 @@ export function useVoiceRecorder({ maxSeconds = 30, onRecorded }) {
   const streamRef = useRef(null)
   const timerRef = useRef(null)
   const startingRef = useRef(false)
+  const mountedRef = useRef(true)
   const onRecordedRef = useRef(onRecorded)
 
   useEffect(() => {
@@ -57,39 +60,50 @@ export function useVoiceRecorder({ maxSeconds = 30, onRecorded }) {
       return
     }
 
-    const recorder = new MediaRecorder(stream)
-    const chunks = []
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.push(event.data)
-    }
-    recorder.onstop = () => {
-      const type = recorder.mimeType || 'audio/webm'
-      release()
-      setRecording(false)
-      const blob = new Blob(chunks, { type })
-      if (blob.size > 0) onRecordedRef.current?.(blob)
-      else setError("Didn't catch that — try again.")
-    }
-
-    streamRef.current = stream
-    recorderRef.current = recorder
     startingRef.current = false
-    recorder.start()
+    if (!mountedRef.current) {
+      stream.getTracks().forEach((track) => track.stop())
+      return
+    }
+    streamRef.current = stream
+
+    try {
+      const recorder = new MediaRecorder(stream)
+      const chunks = []
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data)
+      }
+      recorder.onstop = () => {
+        const type = recorder.mimeType || 'audio/webm'
+        release()
+        setRecording(false)
+        const blob = new Blob(chunks, { type })
+        if (blob.size > 0) onRecordedRef.current?.(blob)
+        else setError("Didn't catch that — try again.")
+      }
+      recorderRef.current = recorder
+      recorder.start()
+    } catch {
+      release()
+      setError('Recording could not start in this browser. You can still type your question.')
+      return
+    }
     setRecording(true)
     timerRef.current = setTimeout(stop, maxSeconds * 1000)
   }, [supported, maxSeconds, release, stop])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
       const recorder = recorderRef.current
       if (recorder) {
         recorder.onstop = null
         if (recorder.state !== 'inactive') recorder.stop()
       }
       release()
-    },
-    [release],
-  )
+    }
+  }, [release])
 
   return { supported, recording, error, start, stop }
 }

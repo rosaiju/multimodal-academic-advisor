@@ -175,8 +175,9 @@ def transcribe_question(
     """Turn a spoken question into text for the student to review.
 
     Voice is an input channel only: this returns text for the question box and
-    never asks the advisor anything itself. The audio is held in memory for the
-    length of this request and never written to disk.
+    never asks the advisor anything itself. The audio is never saved: it exists
+    for this request only. (Starlette buffers an upload part over 1 MB in a temp
+    file while the request runs; a spoken question is well under that.)
 
     `user` is unused beyond requiring a signed-in caller - an open endpoint
     would let anyone spend the team's Deepgram credit.

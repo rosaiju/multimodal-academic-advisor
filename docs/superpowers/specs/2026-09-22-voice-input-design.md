@@ -56,7 +56,9 @@ produced: the deterministic engine still computes every academic fact.
 - Key terms: every catalog course code in spoken form (`COSC241` → `"COSC 241"`)
   plus each subject (`"COSC"`), built from the loaded catalog on each request. The catalogs
   hold 65 codes, well within Deepgram's keyterm limit.
-- Audio is held in memory only and never written to disk.
+- Audio is never saved; it exists for one request only. (Starlette buffers an
+  upload part over 1 MB in a temp file for the request's duration; a 30-second
+  question is ~0.5 MB. Amended after final review.)
 - Response model `TranscribeResponse { text: str, confidence: float }`.
 - Error mapping: `SpeechError("unavailable")` → `503`,
   `SpeechError("unreadable")` → `422`. Response details are fixed strings.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { askAdvisor, getAdvisorHealth, resetConversation, transcribeAudio } from '../api'
+import { askAdvisor, getAdvisorHealth, resetConversation } from '../api'
 import { Alert, Button, Card, Spinner } from './ui'
-import { useVoiceRecorder } from './useVoiceRecorder'
+import { useLiveTranscription } from './useLiveTranscription'
 
 /**
  * The conversational advisor.
@@ -24,8 +24,6 @@ const CONVERSATION_ID = 'default'
 const LOW_CONFIDENCE = 0.6
 
 const VOICE_MESSAGES = {
-  unavailable: "Voice input isn't available right now — you can still type.",
-  unreadable: "Couldn't read that recording — try again.",
   empty: "Didn't catch that — try again.",
   lowConfidence: 'Check this — I may have misheard.',
 }
@@ -44,39 +42,31 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [error, setError] = useState(null)
   const scroller = useRef(null)
   const input = useRef(null)
-  const [transcribing, setTranscribing] = useState(false)
   const [voiceNote, setVoiceNote] = useState(null)
 
-  const handleRecorded = useCallback(async (blob) => {
-    setTranscribing(true)
-    try {
-      const { text, confidence } = await transcribeAudio(blob)
-      if (!text.trim()) {
-        setVoiceNote(VOICE_MESSAGES.empty)
-        return
-      }
-      setDraft((current) => mergeDraft(current, text.trim()))
-      setVoiceNote(confidence < LOW_CONFIDENCE ? VOICE_MESSAGES.lowConfidence : null)
-      input.current?.focus()
-    } catch (err) {
-      setVoiceNote(
-        [413, 415, 422].includes(err.status)
-          ? VOICE_MESSAGES.unreadable
-          : VOICE_MESSAGES.unavailable,
-      )
-    } finally {
-      setTranscribing(false)
+  const handleVoiceDone = useCallback(({ text, confidence }) => {
+    const spoken = text.trim()
+    if (!spoken) {
+      setVoiceNote(VOICE_MESSAGES.empty)
+      return
     }
+    // The input is read-only while listening, so `current` is what was typed first.
+    setDraft((current) => mergeDraft(current, spoken))
+    setVoiceNote(confidence < LOW_CONFIDENCE ? VOICE_MESSAGES.lowConfidence : null)
+    input.current?.focus()
   }, [])
 
-  const recorder = useVoiceRecorder({ onRecorded: handleRecorded })
+  const voice = useLiveTranscription({ onDone: handleVoiceDone })
   const voiceOn = Boolean(health?.voice_available)
-  const voiceBusy = recorder.recording || transcribing
+  const voiceBusy = voice.listening
 
-  function toggleRecording() {
+  function toggleListening() {
     setVoiceNote(null)
-    if (recorder.recording) recorder.stop()
-    else recorder.start()
+    if (voice.listening) {
+      voice.stop()
+    } else {
+      voice.start()
+    }
   }
 
   useEffect(() => {
@@ -233,22 +223,22 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           <input
             id="advisor-question"
             ref={input}
-            value={draft}
+            value={voice.listening ? mergeDraft(draft, voice.liveText) : draft}
+            readOnly={voice.listening}
             onChange={(event) => {
               setDraft(event.target.value)
               setVoiceNote(null)
             }}
             placeholder="What should I take next semester?"
-            disabled={busy || transcribing}
+            disabled={busy}
             maxLength={2000}
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
           />
           {voiceOn && (
             <MicButton
-              recording={recorder.recording}
-              transcribing={transcribing}
-              disabled={busy || transcribing || !recorder.supported}
-              onClick={toggleRecording}
+              listening={voice.listening}
+              disabled={busy || !voice.supported}
+              onClick={toggleListening}
             />
           )}
           <Button type="submit" disabled={busy || voiceBusy || !draft.trim()}>
@@ -256,10 +246,10 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </Button>
         </form>
 
-        {voiceOn && (voiceNote || recorder.error || !recorder.supported) && (
+        {voiceOn && (voiceNote || voice.error || !voice.supported) && (
           <p className="mt-2 text-xs text-slate-500" role="status">
             {voiceNote ??
-              recorder.error ??
+              voice.error ??
               'This browser cannot record audio. You can still type your question.'}
           </p>
         )}
@@ -315,35 +305,27 @@ function AdvisorTurn({ reply }) {
   )
 }
 
-/** Toggle: click to start, click to stop. Red and pulsing while it listens. */
-function MicButton({ recording, transcribing, disabled, onClick }) {
-  const label = recording
-    ? 'Stop recording'
-    : transcribing
-      ? 'Transcribing your question'
-      : 'Ask by voice'
+/** Click to start listening; click again to stop early. It also stops on a pause. */
+function MicButton({ listening, disabled, onClick }) {
+  const label = listening ? 'Stop listening' : 'Ask by voice'
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled && !recording}
-      aria-pressed={recording}
+      disabled={disabled && !listening}
+      aria-pressed={listening}
       aria-label={label}
       title={label}
       className={`inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full ring-1 ring-inset transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        recording
+        listening
           ? 'animate-pulse bg-rose-600 text-white ring-rose-600'
           : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
       }`}
     >
-      {transcribing ? (
-        <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
-      ) : (
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <rect x="9" y="3" width="6" height="12" rx="3" />
-          <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeLinecap="round" />
-        </svg>
-      )}
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="12" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeLinecap="round" />
+      </svg>
     </button>
   )
 }

@@ -72,6 +72,6 @@ def test_the_deterministic_advisor_never_imports_the_model_layer(module: str) ->
     offenders = sorted(
         m for m in _imported_modules(path) if m.split(".")[:2] in (["app", "llm"], ["llm"])
     )
-    assert not offenders, (
-        f"app/advisor/{module} must not import the model layer: {', '.join(offenders)}"
-    )
+    assert (
+        not offenders
+    ), f"app/advisor/{module} must not import the model layer: {', '.join(offenders)}"

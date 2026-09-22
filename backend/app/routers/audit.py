@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.audit.engine import run_audit
+from app.audit.planning import AdvisingPlan, build_plan
 from app.catalog.loader import CatalogError
 from app.catalog.registry import registry
 from app.catalog.schema import Program
@@ -166,3 +167,39 @@ def compare_strategies(
         optimal_satisfied=optimal_ids,
         only_with_optimal=sorted(set(optimal_ids) - set(greedy_ids)),
     )
+
+
+@router.get("/students/{student_id}/plan", response_model=AdvisingPlan)
+def get_plan(
+    student_id: str,
+    program_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=30)] = 8,
+) -> AdvisingPlan:
+    """What is done, what is left, and what to take next.
+
+    Built from the audit rather than a second computation, so the plan and the
+    progress report can never disagree about what a student has finished.
+
+    Every recommendation is derived from the catalog by deterministic rules and is
+    tagged VERIFIED. The LLM layer may phrase this for a student; it may not
+    decide it.
+    """
+    try:
+        stored = _store().load(student_id)
+    except StoredRecordError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    resolved = program_id or stored.program_id
+    if resolved is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"no program on record for {student_id!r} and none supplied. "
+                "Pass ?program_id= to say which degree to plan against."
+            ),
+        )
+
+    program = _program(resolved)
+    record = stored.to_student_record()
+    audit = run_audit(program, record, strategy=MatcherStrategy.OPTIMAL_BIPARTITE)
+    return build_plan(program, record, audit, limit=limit)

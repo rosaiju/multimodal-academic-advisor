@@ -3,6 +3,7 @@ import { Alert, Spinner } from './components/ui'
 import UploadStep from './components/UploadStep'
 import ReviewStep from './components/ReviewStep'
 import Dashboard from './components/Dashboard'
+import AdvisorChat from './components/AdvisorChat'
 import SignIn from './components/SignIn'
 import { deleteRecord, getHealth, getPrograms, getRecord, logout } from './api'
 
@@ -21,6 +22,7 @@ const STEPS = [
   { id: 'upload', label: 'Upload transcript' },
   { id: 'review', label: 'Review & confirm' },
   { id: 'dashboard', label: 'Progress & advice' },
+  { id: 'advisor', label: 'Ask the advisor' },
 ]
 
 export default function App() {
@@ -30,6 +32,10 @@ export default function App() {
   const [programId, setProgramId] = useState('')
   const [user, setUser] = useState(null)
   const [extraction, setExtraction] = useState(null)
+  //: Whether this account has confirmed coursework. Drives both the step chips
+  //: and the advisor's "upload something first" notice, so the two cannot
+  //: disagree about whether there is a record.
+  const [hasRecord, setHasRecord] = useState(false)
   const [bootError, setBootError] = useState(null)
   const [booting, setBooting] = useState(true)
 
@@ -50,14 +56,21 @@ export default function App() {
   function afterSignIn(account) {
     setUser(account)
     getRecord(account.student_id)
-      .then(() => setStep('dashboard'))
-      .catch(() => setStep('upload'))
+      .then(() => {
+        setHasRecord(true)
+        setStep('dashboard')
+      })
+      .catch(() => {
+        setHasRecord(false)
+        setStep('upload')
+      })
   }
 
   function signOut() {
     logout()
     setUser(null)
     setExtraction(null)
+    setHasRecord(false)
     setStep('upload')
   }
 
@@ -69,10 +82,24 @@ export default function App() {
       /* nothing stored yet - fine */
     }
     setExtraction(null)
+    setHasRecord(false)
     setStep('upload')
   }
 
   const activeIndex = STEPS.findIndex((s) => s.id === step)
+
+  /**
+   * Which steps the chips may jump to.
+   *
+   * Review needs an extraction to review, and the dashboard and advisor need a
+   * record to talk about. Letting a chip navigate to a step with nothing behind
+   * it produces an empty screen the student has to back out of.
+   */
+  function canVisit(id) {
+    if (id === 'upload') return true
+    if (id === 'review') return Boolean(extraction)
+    return hasRecord
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -84,7 +111,12 @@ export default function App() {
               Morgan State University · Computer Science · COSC 490
             </p>
           </div>
-          <nav className="flex items-center gap-1.5 text-xs">
+          {/*
+            flex-wrap, not a fixed row: the fourth step ("Ask the advisor") pushed
+            this nav to 438px at a 400px viewport and scrolled the whole page
+            sideways. Chips wrap onto a second line on a phone instead.
+          */}
+          <nav className="flex flex-wrap items-center justify-end gap-1.5 text-xs">
             {user && (
               <div className="mr-3 flex items-center gap-2 border-r border-slate-200 pr-3">
                 <span className="max-w-40 truncate text-slate-600" title={user.email}>
@@ -102,17 +134,21 @@ export default function App() {
             {user &&
               STEPS.map((s, i) => (
                 <div key={s.id} className="flex items-center gap-1.5">
-                  <span
-                    className={`rounded-full px-2.5 py-1 font-medium ${
+                  <button
+                    type="button"
+                    onClick={() => canVisit(s.id) && setStep(s.id)}
+                    disabled={!canVisit(s.id)}
+                    aria-current={i === activeIndex ? 'step' : undefined}
+                    className={`rounded-full px-2.5 py-1 font-medium transition ${
                       i === activeIndex
                         ? 'bg-slate-900 text-white'
-                        : i < activeIndex
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'text-slate-400'
+                        : canVisit(s.id)
+                          ? 'text-slate-600 hover:bg-slate-100'
+                          : 'cursor-not-allowed text-slate-300'
                     }`}
                   >
                     {i + 1}. {s.label}
-                  </span>
+                  </button>
                   {i < STEPS.length - 1 && <span className="text-slate-300">›</span>}
                 </div>
               ))}
@@ -167,7 +203,10 @@ export default function App() {
               <ReviewStep
                 extraction={extraction}
                 programId={programId}
-                onConfirmed={() => setStep('dashboard')}
+                onConfirmed={() => {
+                  setHasRecord(true)
+                  setStep('dashboard')
+                }}
                 onBack={() => setStep('upload')}
               />
             )}
@@ -177,7 +216,12 @@ export default function App() {
                 studentId={user.student_id}
                 onAddMore={() => setStep('upload')}
                 onReset={reset}
+                onAskAdvisor={() => setStep('advisor')}
               />
+            )}
+
+            {step === 'advisor' && (
+              <AdvisorChat hasRecord={hasRecord} onGoToUpload={() => setStep('upload')} />
             )}
           </>
         )}

@@ -50,3 +50,28 @@ def test_engine_package_never_imports_the_ai_layer(package: str) -> None:
     assert not violations, "degree engine must not depend on the AI layer:\n" + "\n".join(
         violations
     )
+
+
+#: Inside app/advisor/, only chat.py may touch the model layer. facts.py computes
+#: the grounding and answers.py writes the answer, and both must stay reachable
+#: with no provider configured - that is what makes the demo work without a key.
+DETERMINISTIC_ADVISOR_MODULES = ["facts.py", "answers.py"]
+
+
+@pytest.mark.parametrize("module", DETERMINISTIC_ADVISOR_MODULES)
+def test_the_deterministic_advisor_never_imports_the_model_layer(module: str) -> None:
+    """The advisor's answer must not depend on a model being available.
+
+    If this fails, an answer has started flowing through app/llm/ before it
+    reaches the fallback path, and the no-API-key demo is broken - probably
+    silently, because a configured machine would never notice.
+    """
+    path = APP / "advisor" / module
+    assert path.exists(), f"expected app/advisor/{module}"
+
+    offenders = sorted(
+        m for m in _imported_modules(path) if m.split(".")[:2] in (["app", "llm"], ["llm"])
+    )
+    assert (
+        not offenders
+    ), f"app/advisor/{module} must not import the model layer: {', '.join(offenders)}"

@@ -150,23 +150,28 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
 
 ### Unfinished — significant
 
-- **There is no conversational advisor.** `app/advisor/` contains a single 0-line
-  `__init__.py`. `app/llm/` does vision extraction only; its docstring says *"No
-  tool use, no conversation, no streaming."* `main.py` still has
-  `# app.include_router(chat.router)` commented out. The project's thesis —
-  *the LLM cannot compute degree progress* — currently guards an architecture
-  whose LLM half does not exist.
+- ~~There is no conversational advisor.~~ **Built (Sep 22 2026).** `app/advisor/`
+  now holds facts.py, answers.py and chat.py; `POST /advisor/chat` is live and the
+  frontend has an "Ask the advisor" panel. See [docs/advisor.md](docs/advisor.md).
+  The design keeps the thesis intact: the engine computes the answer, a model may
+  only rephrase it, and a reply naming a course outside the catalog is discarded.
+- **No live provider has ever been called.** This is now the single biggest gap.
+  Anthropic, OpenAI, Gemini and Ollama are all implemented and tested against a
+  local server speaking their documented shapes, but no real key and no Ollama
+  daemon has ever been exercised from this repository. The advisor runs
+  engine-only, which is a supported and fully tested mode — but nobody has yet
+  seen `source: "engine+llm"` come back from a real endpoint.
 - **No voice input.** Browser-native Web Speech API was in the approved plan. The
-  "multimodal" claim currently rests entirely on PDF parsing.
-- **`llm_configured: false`** — no Anthropic or OpenAI key is set. Both student
-  credit applications were last known to be pending. The chat layer can be *built*
-  and tested against a stubbed provider, but cannot be *demoed* without a key.
+  "multimodal" claim rests on text and PDF parsing.
+- **`llm_configured: false`** — no key is set. Both student credit applications
+  were last known to be pending. **This no longer blocks the demo**: every
+  question in DEMO_GUIDE.md is answered correctly with no provider configured.
 
 ### Unfinished — housekeeping
 
-- **15 commits sit on a stacked branch.** `feature/frontend` is stacked on PR #3
-  and PR #4 and has no PR of its own. **`main` is 15 commits behind and cannot run
-  the demo.** Demoing from a pile of branches is how a live demo dies.
+- ~~15 commits sit on a stacked branch.~~ **Resolved Sep 22 2026.** PR #3, #4 and
+  #5 are all merged; `main` runs the whole demo from a fresh clone. The advisor
+  work sits on `feature/ai-advisor-chat`.
 - Branch protection is off — needs GitHub Education (free Pro) on the @morgan.edu
   address, because the repo is private on a free account.
 - One teammate's GitHub username still outstanding; two collaborator invitations
@@ -281,25 +286,37 @@ and make `main` the thing that runs. Today the demo only exists on a branch.
 
 **2. Then, depending on LLM credits:**
 
-- **Credits available → build the conversational advisor.** This is the highest
-  *value* item: it turns the project's best idea from an assertion into a live
-  demonstration. Plan:
-  - `app/advisor/tools.py` — a tool registry wrapping existing deterministic
-    functions (`run_audit`, `build_plan`, catalog lookups). Tools return engine
-    output verbatim; **no tool computes anything.**
-  - `app/advisor/session.py` — a bounded tool-calling loop, provider-neutral,
-    capped by the `max_tokens_per_session` setting already in config.
-  - `ChatProvider` protocol in `app/llm/provider.py` beside `VisionProvider`, with
-    Anthropic and OpenAI implementations, so whichever credits land is a one-line
-    switch.
-  - `POST /advisor/chat`, authenticated. **Tools must be invoked with the
-    authenticated `student_id`, never one the model supplies** — otherwise chat
-    becomes a way to read other students' records by asking nicely. Prompt
-    injection as IDOR. Add it to the route-guard test.
-  - Tests: the model cannot fabricate a course, cannot name another student's id,
-    cannot exceed the turn budget.
-  - Degrade gracefully: no key → a clear "not configured" state, never a broken
-    page.
+- ~~Credits available → build the conversational advisor.~~ **Done Sep 22 2026,
+  and it did not need credits.** The design that shipped differs from the plan
+  above, deliberately:
+
+  The plan was a bounded tool-calling loop — the model decides which engine
+  function to call, and the loop keeps it honest. What shipped instead computes
+  the facts FIRST, writes a complete deterministic answer, and only then offers
+  the model the chance to reword it. Three reasons:
+
+  1. **It works with no credits.** A tool-calling loop needs a working provider
+     to produce any answer at all. Both credit applications are still pending, so
+     that design would have left the capstone undemonstrable for reasons outside
+     the team's control. The shipped design answers every demo question with no
+     provider configured.
+  2. **Tool-calling APIs differ per vendor.** A provider-neutral tool loop across
+     Anthropic, OpenAI, Gemini and Ollama is four incompatible schemas and a lot
+     of surface area. Rephrasing is one `complete()` call everywhere.
+  3. **The IDOR risk the plan correctly identified disappears.** There is no tool
+     for the model to call with a student id, because the model never calls
+     anything. The record is resolved from the token before the model is
+     involved, exactly once.
+
+  What the plan got right and shipped: `ChatProvider` beside `VisionProvider`,
+  the authenticated student id never coming from the model, graceful degradation
+  with no key, and the test that a model cannot fabricate a course. That last one
+  is enforced twice — in the prompt, and by discarding any reply that mentions a
+  course code outside the catalog.
+
+  **Still open from this item:** a tool-calling loop would answer questions the
+  keyword router cannot ("what if I take COSC 220 and 281 together next fall?").
+  The current design is a floor, not a ceiling. Revisit once credits land.
 
 - **No credits → build voice input.** Browser-native Web Speech API, no key, no
   cost, and it delivers the other half of the "multimodal" claim.

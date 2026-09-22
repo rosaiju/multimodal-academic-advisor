@@ -146,10 +146,12 @@ Then click **Confirm 7 courses**.
 
 Click **Ask the advisor**.
 
-**Voice (needs `DEEPGRAM_API_KEY`).** Click the mic, say *"What can I take after
-COSC 241?"*, click again. Point out that the transcript lands in the box and is
-**not** sent: the student checks it first, the same rule as the transcript
-review screen. Then press Ask.
+**Voice (needs `DEEPGRAM_API_KEY`, use Chrome).** Click the mic once and say
+*"Can I take computer science two forty three?"*. The words appear as you speak,
+and 1.5 s after you stop, the box reads **"Can I take COSC 243?"** - converted
+because COSC 243 is in the catalog. Point out that it was **not** sent: the
+student checks it first, the same rule as the transcript review screen. Then
+press Ask.
 
 ---
 
@@ -241,9 +243,9 @@ State these before being asked.
    department are in [`docs/catalog-open-questions.md`](docs/catalog-open-questions.md),
    including six internal contradictions found in the published catalog. Missing
    requirements are absent, not failed, and the system says so everywhere.
-3. **Voice input has not met real Deepgram yet.** It is tested against a local
-   server speaking Deepgram's documented shapes, like the LLM providers. Run the
-   voice step above once with the real key before presenting.
+3. **Voice is verified in Chrome with a synthesized voice.** Live streaming was
+   checked against real Deepgram; a human speaker and other browsers should be
+   tried before presenting. Safari is unverified.
 4. **Scanned/photographed transcripts need an API key.** Text and text-layer PDFs
    parse deterministically with no key; a scan returns a 415 naming the reason.
 5. **Chat history is in memory.** It is lost on restart and would need a shared

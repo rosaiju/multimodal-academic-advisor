@@ -168,7 +168,14 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   back from real Deepgram as `What can I take after COSC 241?` (confidence 0.99),
   and Deepgram accepted all 76 keyterms. Caveat: a TTS voice pronounces "COSC"
   cleanly, so the same result came back without keyterms; a human speaker is the
-  real test of whether they help. See [docs/advisor.md](docs/advisor.md#voice-input).
+  real test of whether they help.
+  **Live streaming (Sep 22 2026):** words stream into the box through
+  `WS /advisor/listen`; the session ends on Deepgram's UtteranceEnd ~1.5 s after
+  speech. Live check through `DeepgramLive` (continuous PCM): partials grew from
+  0.9 s, final `Can I take UNIV 101 or COSC 243?` at 4.8 s, UtteranceEnd at 5.9 s.
+  End-to-end through the real route to real Deepgram: `What do I need before
+  COSC 241 and MATH 141?` (confidence 0.989). Not yet tried with a human voice in
+  the browser. See [docs/advisor.md](docs/advisor.md#voice-input).
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in DEMO_GUIDE.md is answered correctly with no provider configured.

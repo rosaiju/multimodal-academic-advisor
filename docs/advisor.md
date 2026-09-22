@@ -119,6 +119,26 @@ beside the academic records is a worse trade than losing them.
 A multi-worker deployment would need this in a shared store. It is a single
 process today, and that is written down rather than pretended away.
 
+## Voice input
+
+The mic in the advisor panel is an input channel only. It turns speech into text
+for the question box and never asks the advisor anything itself.
+
+- **Flow:** browser `MediaRecorder` → `POST /advisor/transcribe` (signed in) →
+  `app/speech/deepgram.py` → Deepgram `/v1/listen` (`nova-3`, `smart_format`,
+  `mip_opt_out=true`) → text in the box → the student presses Ask.
+- **Key terms:** every catalog course code in spoken form ("COSC 241") is sent as
+  a Deepgram `keyterm`, built by `app/speech/keyterms.py` from the loaded catalog.
+- **Never auto-sent.** A misheard course code should be caught by the student,
+  not answered. Below 0.6 confidence the panel asks them to check it.
+- **Privacy:** audio lives in memory for one request. It is never written to
+  disk, and Deepgram is told not to keep it for training.
+- **Degrades like the model:** no `DEEPGRAM_API_KEY` means no mic button. A
+  rejected key, no credit, a rate limit or a timeout means a quiet note, and
+  typing still works. Deepgram's error text is logged, never shown.
+- `app/audit/` and `app/catalog/` may not import `app.speech`
+  (`test_no_llm_in_engine.py`).
+
 ## What is NOT tested
 
 The Gemini and Ollama HTTP paths are tested against a local server that speaks

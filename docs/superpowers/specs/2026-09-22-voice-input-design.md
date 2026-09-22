@@ -54,8 +54,8 @@ produced: the deterministic engine still computes every academic fact.
 - Checks, in order: key configured (else `503`), content type starts with
   `audio/` (else `415`), size ≤ `max_audio_bytes` (else `413`).
 - Key terms: every catalog course code in spoken form (`COSC241` → `"COSC 241"`)
-  plus `"COSC"`, built from the catalog registry and cached. The Morgan catalog
-  has 37 courses, well within Deepgram's keyterm limit.
+  plus each subject (`"COSC"`), built from the loaded catalog on each request. The catalogs
+  hold 65 codes, well within Deepgram's keyterm limit.
 - Audio is held in memory only and never written to disk.
 - Response model `TranscribeResponse { text: str, confidence: float }`.
 - Error mapping: `SpeechError("unavailable")` → `503`,

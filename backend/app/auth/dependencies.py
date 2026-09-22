@@ -45,6 +45,24 @@ def user_store(settings: Annotated[Settings, Depends(get_settings)]) -> UserStor
     return UserStore(settings.user_dir)
 
 
+def user_for_token(token: str, settings: Settings, store: UserStore) -> User | None:
+    """The account behind a token, or None for every kind of failure alike.
+
+    Shared by `current_user` and the voice WebSocket, which carries its token in
+    a message rather than a header. One function, so both paths accept exactly
+    the same tokens.
+    """
+    try:
+        student_id = student_id_from_token(token, secret=settings.jwt_signing_secret)
+    except InvalidToken:
+        return None
+    try:
+        return store.get(student_id)
+    except UserStoreError:
+        # A corrupt account file is our problem, not a hint to hand out.
+        return None
+
+
 def current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -58,20 +76,7 @@ def current_user(
     """
     if credentials is None or not credentials.credentials:
         raise _UNAUTHENTICATED
-
-    try:
-        student_id = student_id_from_token(
-            credentials.credentials, secret=settings.jwt_signing_secret
-        )
-    except InvalidToken:
-        raise _UNAUTHENTICATED from None
-
-    try:
-        user = store.get(student_id)
-    except UserStoreError:
-        # A corrupt account file is our problem, not a hint to hand out.
-        raise _UNAUTHENTICATED from None
-
+    user = user_for_token(credentials.credentials, settings, store)
     if user is None:
         raise _UNAUTHENTICATED
     return user

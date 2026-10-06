@@ -1,7 +1,8 @@
 # Project status — COSC 490 Multimodal AI Academic Advisor
 
-Last updated: **2026-09-20** (end of session)
-Branch: **`feature/frontend`** · HEAD: **`3120cfa`** · **3 commits ahead of `origin/feature/frontend`, nothing pushed**
+Last updated: **2026-10-06**
+Branch: **`feature/live-llm-verification`** (local, not pushed, not merged) ·
+based on `docs/progress-report-1` (PR #7, open) · `main` is still `13efa15`
 
 This file is the handover between working sessions. It records what is true right
 now, not what we intend — anything listed as working has been run.
@@ -155,14 +156,26 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   frontend has an "Ask the advisor" panel. See [docs/advisor.md](docs/advisor.md).
   The design keeps the thesis intact: the engine computes the answer, a model may
   only rephrase it, and a reply naming a course outside the catalog is discarded.
-- **No live provider has ever been called.** This is now the single biggest gap.
-  Anthropic, OpenAI, Gemini and Ollama are all implemented and tested against a
-  local server speaking their documented shapes, but no real key and no Ollama
-  daemon has ever been exercised from this repository. The advisor runs
-  engine-only, which is a supported and fully tested mode — but nobody has yet
-  seen `source: "engine+llm"` come back from a real endpoint.
-- **No voice input.** Browser-native Web Speech API was in the approved plan. The
-  "multimodal" claim rests on text and PDF parsing.
+- ~~**No live provider has ever been called.**~~ **Ollama verified live
+  (2026-10-06, `feature/live-llm-verification`).** `qwen2.5:7b` and `llama3.2:3b`
+  on the development laptop returned `source: "engine+llm"` through `ask()` and,
+  for `qwen2.5:7b`, through the real HTTP route in a browser. The first live run
+  showed the course-code guard was not enough (a reply passed it while calling
+  12.5% progress "of the total credits required"), so replies are now checked by
+  `app/advisor/consistency.py` for credit figures, eligibility, blockers,
+  in-progress status, the catalog caveat and refusals. Most live replies are
+  still rejected (about 2 of 6 ship); every rejection was read and was a real
+  departure. **Anthropic, OpenAI and Gemini have still never been called live** -
+  no key. Details and limits: [docs/advisor.md](docs/advisor.md#live-verification).
+- **In-progress courses were invisible to the advisor.** The engine computed them
+  (`plan.under_way`, `total_credits_in_progress`) but the advisor's facts dropped
+  them, so "what am I taking now?" was answered with completed courses. Fixed on
+  the same branch: an `in_progress` intent, and blockers say which prerequisite
+  is under way.
+- **No voice input on `main`.** SawcyD's `origin/feature/voice-input` (8 commits,
+  Sep 22, no PR) implements voice through Deepgram, not the Web Speech API the
+  plan named; it changes `AdvisorChat.jsx`. Whether to merge it, replace it, or
+  add Web Speech as the no-key fallback is a team decision and is not made here.
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in docs/demo-reference.md is answered correctly with no provider configured.
@@ -318,8 +331,11 @@ and make `main` the thing that runs. Today the demo only exists on a branch.
   keyword router cannot ("what if I take COSC 220 and 281 together next fall?").
   The current design is a floor, not a ceiling. Revisit once credits land.
 
-- **No credits → build voice input.** Browser-native Web Speech API, no key, no
-  cost, and it delivers the other half of the "multimodal" claim.
+- **Voice input** - review SawcyD's `feature/voice-input` (Deepgram) as a team
+  before building anything else; Web Speech could be its no-key fallback.
+- **Live-check a hosted provider** the day a key exists:
+  `python scripts/live_llm_smoke.py --provider gemini`. Only Ollama has been
+  verified.
 
 **3. Blocked on other people** — chase in parallel:
 - Dr. Wang: the six catalog questions and the transfer-hours conflict.

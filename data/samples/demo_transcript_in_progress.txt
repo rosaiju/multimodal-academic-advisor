@@ -1,0 +1,21 @@
+MORGAN STATE UNIVERSITY
+SYNTHETIC SAMPLE TRANSCRIPT - FICTIONAL STUDENT, NOT A REAL RECORD
+
+Student: Demo Student
+Program: Computer Science, B.S.
+
+Fall 2024
+COSC 111  Introduction to Computer Science I    4.00  A
+ENGL 101  Composition I                         3.00  B
+MATH 241  Calculus I                            4.00  B
+UNIV 101  University First-Year Seminar         1.00  A
+Term GPA: 3.42   Cumulative GPA: 3.42
+
+Spring 2025
+COSC 112  Introduction to Computer Science II   4.00  A
+ENGL 102  Composition II                        3.00  A
+MATH 242  Calculus II                           4.00  C
+Term GPA: 3.64   Cumulative GPA: 3.52
+
+Fall 2025
+COSC 220  Data Structures and Algorithms        4.00  IP

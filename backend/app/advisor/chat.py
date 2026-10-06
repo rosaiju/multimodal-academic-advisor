@@ -6,9 +6,11 @@ The order of operations is the whole design:
 2. Produce a complete, correct answer from those facts. Deterministic.
 3. ONLY THEN, if a chat provider is configured and reachable, ask it to rephrase
    that answer conversationally, constrained to the same facts.
-4. Check what came back. If the model invented a course code that is not in the
-   catalog or on the student's record, throw its answer away and ship the
-   deterministic one.
+4. Check what came back (`consistency.check_rephrasing`). If the model invented
+   a course code, dropped or changed a credit figure, flipped a course's
+   eligibility, called an in-progress course finished, lost the partial-catalog
+   warning or answered something the engine declined to, throw its answer away
+   and ship the deterministic one.
 
 Step 2 means the advisor is never down. Step 4 means a fluent wrong answer loses
 to a plain right one. Neither step is optional, and the LLM is never consulted
@@ -19,11 +21,13 @@ decided.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-from app.advisor.answers import COURSE_CODE, GroundedAnswer, Intent, deterministic_answer
+from app.advisor.answers import GroundedAnswer, Intent, deterministic_answer
+from app.advisor.consistency import allowed_codes, check_rephrasing, invented_codes
 from app.advisor.facts import AdvisorFacts, render_facts
 from app.llm.chat import ChatProvider, ChatTurn, ProviderUnavailable, get_chat_provider
 
@@ -53,6 +57,10 @@ ABSOLUTE RULES:
   human advisor can clear a degree.
 - Keep it short and concrete - a few sentences or a short list. This is read by
   someone deciding what to register for.
+- A course listed as IN PROGRESS is not completed and counts toward nothing yet.
+  A BLOCKED course is not available to take. Never say otherwise.
+- Keep every caveat in the prepared answer, including any note that the catalog
+  is partial. If the prepared answer declines a question, decline it too.
 
 --- VERIFIED FACTS FOR THIS STUDENT ---
 {facts}
@@ -65,7 +73,8 @@ A deterministic answer to the student's question has already been prepared:
 --- END PREPARED ANSWER ---
 
 Rephrase the prepared answer in a natural, friendly advising voice. Keep every
-fact, number and course code exactly as given. You may reorder and reword. You
+fact, number and course code exactly as given, each with the same meaning - a
+percentage of progress stays a percentage of progress. You may reorder and reword. You
 may not add academic claims that are not in the facts block."""
 
 
@@ -136,40 +145,37 @@ class AdvisorReply:
     #: Why the model was not used, or why its answer was rejected. Shown in the
     #: UI as a quiet note, never as an error.
     notice: str | None = None
+    #: The engine's own answer. Equal to `answer` unless a model rephrased it;
+    #: kept so a live check can compare the two.
+    prepared: str = ""
+    #: A model reply that failed the consistency check. Never shown to the student
+    #: and not returned by the API; kept for logs and the live smoke test.
+    discarded: str | None = None
 
 
 def _known_codes(facts: AdvisorFacts) -> set[str]:
-    """Every course code the model is allowed to mention."""
-    codes = {c[0].replace(" ", "").upper() for c in facts.completed}
-    for rec in [*facts.recommended, *facts.blocked]:
-        codes.add(rec.course.code.replace(" ", "").upper())
-    for block in facts.blocks:
-        codes.update(c.replace(" ", "").upper() for c in block["options"])
-    return codes
+    """Every course code the model is allowed to mention, before the question and
+    the prepared answer are added (see `consistency.allowed_codes`)."""
+    return allowed_codes(facts, "")
 
 
 def _invented_codes(
     text: str, allowed: set[str], subjects: frozenset[str] = frozenset()
 ) -> list[str]:
-    """Course codes in `text` that are not in `allowed`.
+    """Kept for callers of the original guard; see `consistency.invented_codes`."""
+    return invented_codes(text, allowed, subjects)
 
-    This is the check that makes the LLM path safe to demo. A model that decides
-    a student should take COSC 499 - a course that does not exist - is exactly
-    the failure the whole architecture is built to prevent, so its answer is
-    discarded rather than shown with a caveat.
 
-    `subjects` is the set of prefixes the catalog actually defines, and it is what
-    keeps this from firing on ordinary prose: "you need 101 more credits" parses
-    as NEED101 under any naive pattern, and discarding a correct answer over that
-    would be its own kind of wrong. With no subjects supplied nothing is flagged,
-    because guessing which words are course subjects is exactly the mistake.
-    """
-    found = {f"{m.group(1).upper()}{m.group(2)}" for m in COURSE_CODE.finditer(text)}
-    return sorted(
-        code
-        for code in found
-        if code not in allowed and any(code.startswith(subject) for subject in subjects)
-    )
+_THINKING = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Drop a reasoning model's <think> block. It is scratch work, not an answer,
+    and it routinely contains numbers and codes the student was never told."""
+    text = _THINKING.sub("", text)
+    if "<think>" in text.lower():  # unterminated: the answer never started
+        return ""
+    return text.strip()
 
 
 def _history_for_prompt(conversation: Conversation, question: str, keep: int) -> list[ChatTurn]:
@@ -204,7 +210,24 @@ def ask(
         source="engine",
         grounded=prepared.grounded,
         citations=prepared.citations,
+        prepared=prepared.text,
     )
+
+    def engine_answer(
+        notice: str, *, model: str | None = None, discarded: str | None = None
+    ) -> AdvisorReply:
+        return AdvisorReply(
+            answer=prepared.text,
+            intent=prepared.intent,
+            source="engine",
+            grounded=prepared.grounded,
+            citations=prepared.citations,
+            provider=provider.provider_id,
+            model=model,
+            notice=notice,
+            prepared=prepared.text,
+            discarded=discarded,
+        )
 
     # Nothing to rephrase against: with no record, the deterministic text already
     # says the right thing and a model could only pad it.
@@ -215,18 +238,10 @@ def ask(
     usable, reason = provider.available()
     if not usable:
         return finish(
-            AdvisorReply(
-                answer=prepared.text,
-                intent=prepared.intent,
-                source="engine",
-                grounded=prepared.grounded,
-                citations=prepared.citations,
-                provider=provider.provider_id,
-                notice=(
-                    f"Answered from the degree engine. The language model is not "
-                    f"available ({reason}), which changes nothing about the numbers "
-                    f"above - they are computed, not generated."
-                ),
+            engine_answer(
+                f"Answered from the degree engine. The language model is not "
+                f"available ({reason}), which changes nothing about the numbers "
+                f"above - they are computed, not generated."
             )
         )
 
@@ -238,44 +253,38 @@ def ask(
     )
 
     try:
-        text = provider.complete(
+        raw = provider.complete(
             system=system,
             messages=_history_for_prompt(conversation, question, history_turns),
         )
     except ProviderUnavailable as exc:
         logger.info("chat provider unavailable, serving deterministic answer: %s", exc)
         return finish(
-            AdvisorReply(
-                answer=prepared.text,
-                intent=prepared.intent,
-                source="engine",
-                grounded=prepared.grounded,
-                citations=prepared.citations,
-                provider=provider.provider_id,
-                notice=(
-                    f"Answered from the degree engine. The language model could not "
-                    f"be reached ({exc})."
-                ),
+            engine_answer(
+                f"Answered from the degree engine. The language model could not "
+                f"be reached ({exc})."
+            )
+        )
+    except Exception:  # noqa: BLE001 - a provider bug must not become a 500
+        logger.exception("chat provider failed unexpectedly, serving deterministic answer")
+        return finish(
+            engine_answer(
+                "Answered from the degree engine. The language model returned "
+                "something that could not be used."
             )
         )
 
-    invented = _invented_codes(text, _known_codes(facts), facts.catalog_subjects)
-    if invented:
-        logger.warning("discarding model answer: invented course codes %s", ", ".join(invented))
+    text = _strip_reasoning(raw) if isinstance(raw, str) else ""
+    problems = check_rephrasing(prepared, text, facts, question=question)
+    if problems:
+        logger.warning("discarding model answer: %s", "; ".join(problems))
         return finish(
-            AdvisorReply(
-                answer=prepared.text,
-                intent=prepared.intent,
-                source="engine",
-                grounded=prepared.grounded,
-                citations=prepared.citations,
-                provider=provider.provider_id,
+            engine_answer(
+                "The language model's phrasing did not match the degree engine "
+                f"({problems[0]}), so it was discarded and you are reading the "
+                "engine's answer.",
                 model=provider.name,
-                notice=(
-                    "The language model's phrasing mentioned course codes that are "
-                    f"not in your catalog or on your record ({', '.join(invented)}), "
-                    "so it was discarded and you are reading the engine's answer."
-                ),
+                discarded=text,
             )
         )
 
@@ -289,8 +298,10 @@ def ask(
             provider=provider.provider_id,
             model=provider.name,
             notice=(
-                "Phrased by a language model. Every number and course code comes "
-                "from the degree engine."
+                "Phrased by a language model and checked against the degree "
+                "engine: every number, course code and eligibility statement "
+                "comes from the engine."
             ),
+            prepared=prepared.text,
         )
     )

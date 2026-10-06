@@ -39,6 +39,7 @@ class Intent(StrEnum):
     WHY_RECOMMENDED = "why_recommended"
     COURSE_INFO = "course_info"
     PROGRESS = "progress"
+    IN_PROGRESS = "in_progress"
     NO_RECORD = "no_record"
     UNKNOWN = "unknown"
 
@@ -79,6 +80,23 @@ def detect_intent(question: str) -> Intent:
         k in q for k in ("how many", "missing", "left", "remain", "need", "short")
     ):
         return Intent.CREDITS
+
+    # Before NEXT_SEMESTER: "what am I enrolled in" is about now, not next term.
+    if any(
+        k in q
+        for k in (
+            "in progress",
+            "taking right now",
+            "taking now",
+            "currently taking",
+            "am i taking",
+            "currently enrolled",
+            "enrolled in right now",
+            "taking this semester",
+            "taking this term",
+        )
+    ):
+        return Intent.IN_PROGRESS
 
     if any(
         k in q
@@ -132,6 +150,21 @@ def _coverage_note(facts: AdvisorFacts) -> str:
         "absent rather than failed - check with your advisor before relying on a "
         "total."
     )
+
+
+def _key(code: str) -> str:
+    return code.replace(" ", "").upper()
+
+
+def _in_progress_codes(facts: AdvisorFacts) -> set[str]:
+    return {_key(code) for code, _, _ in facts.in_progress}
+
+
+def _mark_in_progress(codes: list[str], facts: AdvisorFacts) -> str:
+    """'COSC220 (in progress now), COSC241' - a missing prerequisite the student is
+    already sitting in is a different situation from one they have not started."""
+    under_way = _in_progress_codes(facts)
+    return ", ".join(f"{c} (in progress now)" if _key(c) in under_way else c for c in codes)
 
 
 def _no_record_answer() -> GroundedAnswer:
@@ -258,7 +291,8 @@ def answer_next_semester(facts: AdvisorFacts) -> GroundedAnswer:
 
     if facts.blocked:
         blocked_bits = [
-            f"{r.course.code} (needs {', '.join(r.missing_prerequisites) or 'unknown'})"
+            f"{r.course.code} "
+            f"(needs {_mark_in_progress(r.missing_prerequisites, facts) or 'unknown'})"
             for r in facts.blocked[:4]
         ]
         lines.append("Not yet eligible: " + "; ".join(blocked_bits) + ".")
@@ -367,7 +401,7 @@ def answer_why_recommended(facts: AdvisorFacts, question: str) -> GroundedAnswer
     else:
         lines.append(
             "- You are NOT eligible yet; still missing "
-            + (", ".join(target.missing_prerequisites) or "an unlisted prerequisite")
+            + (_mark_in_progress(target.missing_prerequisites, facts) or "an unlisted prerequisite")
             + "."
         )
     for warning in target.warnings:
@@ -404,6 +438,20 @@ def answer_course_info(facts: AdvisorFacts, question: str) -> GroundedAnswer:
             citations=[code],
         )
 
+    under_way = {_key(c): (c, t, cr) for c, t, cr in facts.in_progress}
+    if key in under_way:
+        _, title, credits = under_way[key]
+        return GroundedAnswer(
+            text=(
+                f"You are taking {code} {title} ({credits} cr) right now - it is "
+                "confirmed on your record as in progress. It does not count toward "
+                "any requirement or prerequisite until a final passing grade is "
+                "recorded."
+            ),
+            intent=Intent.COURSE_INFO,
+            citations=[code],
+        )
+
     rec = facts.find_recommendation(code)
     if rec is not None:
         return answer_why_recommended(facts, question)
@@ -420,6 +468,42 @@ def answer_course_info(facts: AdvisorFacts, question: str) -> GroundedAnswer:
     )
 
 
+def answer_in_progress(facts: AdvisorFacts) -> GroundedAnswer:
+    if not facts.in_progress:
+        return GroundedAnswer(
+            text=(
+                "Your confirmed record has no courses marked as in progress. If you "
+                "are enrolled this term, those courses only appear here once a "
+                "transcript listing them (grade IP or REG) is uploaded and confirmed."
+            ),
+            intent=Intent.IN_PROGRESS,
+            citations=[],
+        )
+    lines = ["These courses are confirmed on your record as in progress:"]
+    for code, title, credits in facts.in_progress:
+        lines.append(f"- {code} {title} ({credits} cr)")
+    lines.append(
+        f"That is {facts.credits_in_progress} credits in progress. They are not "
+        "counted yet: they satisfy no requirement or prerequisite until a final "
+        "passing grade is recorded, so your total stays at "
+        f"{facts.credits_earned} earned credits for now."
+    )
+    blocked_on = [
+        r.course.code
+        for r in facts.blocked
+        if _in_progress_codes(facts) & {_key(c) for c in r.missing_prerequisites}
+    ]
+    if blocked_on:
+        lines.append(
+            "Finishing them would clear a prerequisite for: " + ", ".join(blocked_on) + "."
+        )
+    return GroundedAnswer(
+        text="\n".join(lines) + _coverage_note(facts),
+        intent=Intent.IN_PROGRESS,
+        citations=[code for code, _, _ in facts.in_progress],
+    )
+
+
 def answer_progress(facts: AdvisorFacts) -> GroundedAnswer:
     satisfied = [b for b in facts.blocks if b["satisfied"]]
     lines = [
@@ -428,6 +512,12 @@ def answer_progress(facts: AdvisorFacts) -> GroundedAnswer:
         f"{facts.credits_remaining} to go.",
         f"{len(satisfied)} of {len(facts.blocks)} encoded requirement blocks are satisfied.",
     ]
+    if facts.in_progress:
+        lines.append(
+            "In progress (not counted yet): "
+            + ", ".join(code for code, _, _ in facts.in_progress)
+            + "."
+        )
     if facts.recommended:
         lines.append(
             "Eligible next: " + ", ".join(r.course.code for r in facts.recommended[:5]) + "."
@@ -463,8 +553,7 @@ def deterministic_answer(facts: AdvisorFacts | None, question: str) -> GroundedA
     if facts is None or not facts.has_coursework:
         # A student with no confirmed coursework gets the same honest answer
         # whatever they asked - there is nothing to reason about yet.
-        if facts is None or not facts.completed:
-            return _no_record_answer()
+        return _no_record_answer()
 
     intent = detect_intent(question)
     if intent is Intent.CREDITS:
@@ -481,4 +570,6 @@ def deterministic_answer(facts: AdvisorFacts | None, question: str) -> GroundedA
         return answer_course_info(facts, question)
     if intent is Intent.PROGRESS:
         return answer_progress(facts)
+    if intent is Intent.IN_PROGRESS:
+        return answer_in_progress(facts)
     return answer_unknown(facts)

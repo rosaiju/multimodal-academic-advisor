@@ -10,7 +10,8 @@ This file is only the script.
 > fabricated transcript for a fictional student. Say so out loud — the project's
 > whole argument is about handling academic records carefully.
 
-**No API key is needed.** Every answer below comes from the degree engine.
+**No API key is needed.** Every answer below comes from the degree engine. An
+optional live-model segment (local Ollama, still no key) is at the end.
 
 ---
 
@@ -129,8 +130,9 @@ lists what it can answer.
 > No model was involved at all — that is why this demo runs with zero API keys,
 > which matters because our student credit applications are still pending. When a
 > model *is* configured the label changes to *Phrased by \<model\>*, and if its
-> reply mentions a course code outside the catalog, we throw the reply away and
-> show the engine's answer."
+> reply changes any fact - a credit figure, a course's eligibility, a missing
+> prerequisite, the catalog warning - we throw the reply away and show the
+> engine's answer."
 
 If time is short, drop question 1 and keep the refusal.
 
@@ -149,9 +151,52 @@ Open `backend/tests/test_no_llm_in_engine.py` on screen.
 
 Close on the numbers:
 
-> "604 tests pass. CI runs them on Python 3.11 and 3.14 and builds the frontend
+> "667 tests pass. CI runs them on Python 3.11 and 3.14 and builds the frontend
 > on Node 22 and 24, on every pull request. Six pull requests merged; `main` runs
 > the whole thing from a fresh clone."
+
+---
+
+## Optional: the live model (adds ~2 minutes, needs Ollama)
+
+Verified on the dev laptop on 2026-10-06 with `qwen2.5:7b`. Expect 15-85 s per
+answer on a laptop CPU, so ask one or two questions only, and warm the model up
+before class (ask anything once).
+
+Start the backend with the model switched on instead of plain Terminal 1:
+
+```powershell
+cd backend
+ollama list                                   # confirm qwen2.5:7b is pulled
+$env:LLM_PROVIDER="ollama"; $env:OLLAMA_CHAT_MODEL="qwen2.5:7b"; $env:OLLAMA_TIMEOUT_SECONDS="180"
+.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+`curl http://127.0.0.1:8000/advisor/health` should now say
+`"llm_available": true, "degraded": false`.
+
+Upload **`data/samples/demo_transcript_in_progress.txt`** instead (same fictional
+student plus COSC 220 in progress: 23.00 earned, 4.00 in progress). Then ask:
+
+1. **"What courses am I taking right now?"** - COSC 220, *not counted yet*, and
+   it would unblock COSC 352 and 354.
+2. **"Can I take COSC 354?"** - not yet: COSC 220 (in progress now) and COSC 241.
+
+Point at the label under each answer. *Phrased by qwen2.5:7b* means the model's
+wording passed the consistency check. *Computed by the engine* with a grey note
+like "drops the warning that the encoded catalog is partial" means the model's
+wording was **caught and thrown away**. Either outcome is a good demo; say which
+one happened.
+
+> **Say this:** "The first time we connected a real model, it told a test
+> student 'You need 105 more credits - that's 12.5% of the total credits
+> required.' Every course code was real, so our original guard let it through.
+> 12.5% was progress made, not credits missing. So now every reply is checked
+> against the engine's own answer: credits, eligibility, blockers, the catalog
+> warning. If anything moved, the student sees the engine's answer instead."
+
+If Ollama is slow or not running, nothing breaks: answers fall back to the
+engine with a note saying the model was unavailable or timed out.
 
 ---
 
@@ -163,6 +208,8 @@ Close on the numbers:
 | Signed out unexpectedly | `JWT_SECRET` unset and backend restarted. Sign in again. |
 | Port in use | `netstat -ano \| findstr :8000` then `taskkill /PID <pid> /F` |
 | Advisor says it is "running on the degree engine" | **Not a fault.** That is the no-key mode and the answers are correct. |
+| Ollama set but `llm_available: false` | The model is not pulled. `ollama list`, then set `OLLAMA_CHAT_MODEL` to one that is. |
+| Live answer never arrives | CPU inference is slow; after `OLLAMA_TIMEOUT_SECONDS` it falls back to the engine. Ask fewer questions live. |
 | A 404 in the browser console at sign-in | **Expected.** The app probes `/students/{id}/record` to pick Upload vs Dashboard. |
 
 Full troubleshooting: [`docs/demo-reference.md`](docs/demo-reference.md).

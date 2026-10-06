@@ -67,6 +67,10 @@ class AdvisorFacts:
     catalog_subjects: frozenset[str] = frozenset()
 
     completed: list[tuple[str, str, Decimal]] = field(default_factory=list)
+    #: Confirmed as in progress (IP/REG/INC). Not completed, not counted, and not
+    #: recommended - the student is sitting in them. Same shape as `completed`.
+    in_progress: list[tuple[str, str, Decimal]] = field(default_factory=list)
+    credits_in_progress: Decimal = Decimal(0)
     blocks: list[dict] = field(default_factory=list)
     recommended: list[Recommendation] = field(default_factory=list)
     blocked: list[Recommendation] = field(default_factory=list)
@@ -77,7 +81,7 @@ class AdvisorFacts:
 
     @property
     def has_coursework(self) -> bool:
-        return bool(self.completed)
+        return bool(self.completed or self.in_progress)
 
     def find_recommendation(self, code: str) -> Recommendation | None:
         """Look up one course among the recommendations, blocked ones included.
@@ -147,6 +151,8 @@ def build_facts(
             _subject_of(course.code) for course in program.courses if _subject_of(course.code)
         ),
         completed=[(c.code, c.title or "", c.credits) for c in plan.completed],
+        in_progress=[(c.code, c.title or "", c.credits) for c in plan.under_way],
+        credits_in_progress=audit.total_credits_in_progress,
         blocks=blocks,
         recommended=list(plan.recommended),
         blocked=list(plan.blocked),
@@ -194,6 +200,14 @@ def render_facts(facts: AdvisorFacts) -> str:
             lines.append(f"  {code} {title} ({credits} cr)")
     else:
         lines.append("  (none confirmed yet)")
+
+    lines += ["", "IN PROGRESS NOW (not completed, not counted toward any total yet):"]
+    if facts.in_progress:
+        for code, title, credits in facts.in_progress:
+            lines.append(f"  {code} {title} ({credits} cr)")
+        lines.append(f"  credits in progress: {facts.credits_in_progress}")
+    else:
+        lines.append("  (none)")
 
     lines += ["", "REQUIREMENT BLOCKS:"]
     for block in facts.blocks:

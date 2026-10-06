@@ -221,12 +221,29 @@ class TestFactsRendering:
 
 
 class TestModelIsOnlyAllowedToPhrase:
+    #: A faithful rephrasing of the engine's credits answer for the fixture student.
+    FAITHFUL_CREDITS = (
+        "So far you've earned 15 of the 120 credits your degree needs, which leaves "
+        "105 to go - you're 12.5% of the way through by credit count. Keep in mind "
+        "the encoded catalog is still partial, so check with your advisor before "
+        "relying on that total."
+    )
+
     def test_uses_the_model_when_one_is_available(self, facts) -> None:
-        stub = StubProvider("You need 101 more credits. Take COSC 220 next.")
+        stub = StubProvider(self.FAITHFUL_CREDITS)
         reply = ask(facts, "How many credits am I missing?", student_id="s1", provider=stub)
         assert reply.source == "engine+llm"
-        assert reply.answer == "You need 101 more credits. Take COSC 220 next."
+        assert reply.answer == self.FAITHFUL_CREDITS
         assert stub.calls, "the provider should have been called"
+
+    def test_a_model_that_changes_a_credit_figure_is_discarded(self, facts) -> None:
+        """This reply passed the original course-code-only guard. It says 101 where
+        the engine computed 105, and it drops the partial-catalog warning."""
+        stub = StubProvider("You need 101 more credits. Take COSC 220 next.")
+        reply = ask(facts, "How many credits am I missing?", student_id="s1", provider=stub)
+        assert reply.source == "engine"
+        assert "105" in reply.answer
+        assert reply.discarded == "You need 101 more credits. Take COSC 220 next."
 
     def test_the_prompt_contains_the_facts_and_the_prepared_answer(self, facts) -> None:
         stub = StubProvider()
@@ -264,11 +281,23 @@ class TestModelIsOnlyAllowedToPhrase:
         assert "COSC499" in (reply.notice or "")
 
     def test_a_model_reusing_real_codes_is_accepted(self, facts) -> None:
+        eligible = ", ".join(r.course.code for r in facts.recommended[:6])
+        stub = StubProvider(
+            f"You're eligible now for {eligible}. COSC354 needs COSC220 and COSC241 "
+            "first, and COSC352 needs COSC220, so those aren't available yet. The "
+            "catalog is still partial, so confirm with your advisor."
+        )
+        reply = ask(facts, "What should I take next semester?", student_id="s1", provider=stub)
+        assert reply.source == "engine+llm", reply.notice
+        assert facts.recommended[0].course.code in reply.answer
+
+    def test_a_model_naming_only_one_course_is_discarded(self, facts) -> None:
+        """Real codes, but the other eligible courses and every blocker are gone."""
         code = facts.recommended[0].course.code
         stub = StubProvider(f"Take {code} next term - it opens up the rest of the major.")
         reply = ask(facts, "What should I take next semester?", student_id="s1", provider=stub)
-        assert reply.source == "engine+llm"
-        assert code in reply.answer
+        assert reply.source == "engine"
+        assert "drops course codes" in (reply.notice or "")
 
     def test_use_llm_false_skips_the_provider_entirely(self, facts) -> None:
         stub = StubProvider()

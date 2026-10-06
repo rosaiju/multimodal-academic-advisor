@@ -34,10 +34,11 @@ advisor implements that rule in four steps.
          |                 and asked to reword it. It is never asked what the
          |                 student needs.
          v
-  4. check it     ......  app/advisor/chat.py::_invented_codes
-         |                 does the reply mention a course code that is not in
-         |                 the catalog and not on the record? Then DISCARD the
-         |                 model's answer and ship step 2's.
+  4. check it     ......  app/advisor/consistency.py::check_rephrasing
+         |                 does the reply still say what step 2 said - same
+         |                 credit figures, eligible courses, blockers, in-progress
+         |                 status, catalog caveat, refusal? Any doubt: DISCARD
+         |                 the model's answer and ship step 2's.
          v
       reply + a label saying which of the two you are reading
 ```
@@ -58,13 +59,39 @@ this architecture exists to prevent, and annotating it with a caveat is not
 enough - a student reads the sentence, not the footnote. So the answer is thrown
 away and the deterministic one is shown instead, with a note saying why.
 
+Checking only for invented course codes turned out not to be enough. The first
+live run (below) produced replies that named only real courses and were still
+wrong. `check_rephrasing()` rejects a reply that:
+
+| Check | Live failure it was written for |
+|---|---|
+| mentions a course code not in the facts, the engine's answer or the question | (the original guard) |
+| drops a course code the engine named - eligible courses, blockers, missing prerequisites, in-progress courses (an unmet block's `Options:` menu may be shortened) | "COSC 352 and 354 are blocked because they require COSC 220" - 354 also needs COSC 241 |
+| drops a headline total or any figure stated as credits or a percentage | "You need 105 more credits" with the 15 earned and 120 required gone |
+| states a digit the engine never produced | "you need 101 more" when the engine said 105 |
+| uses the progress percentage without saying it is progress | "That's 12.5% of the total credits required" |
+| calls a blocked course available, or an eligible one blocked | |
+| calls an in-progress course completed | |
+| implies the student can graduate when the engine says not | |
+| gives a course another course's title | "COSC241 Computer Organization and Architecture" (COSC 243's title) |
+| drops the partial-catalog warning | most rejections in practice |
+| answers a question the engine declined | |
+
+Every check is a narrow pattern, not an understanding of English. It cannot
+prove a reply right; it catches the specific ways rephrasing has been seen to go
+wrong, and errs towards rejecting, because a rejected reply costs the student
+nothing - they get the engine's answer. Matching is by context, not by value:
+an earlier draft confused "4 requirement blocks" with "4 credits in progress"
+and threw away a correct answer.
+
 ## What the model is allowed to see
 
 `render_facts()` builds the entire permitted universe of academic fact: credits
 earned, required and remaining (pre-computed, so the model never does
 arithmetic), every requirement block and its status, confirmed coursework,
 recommendations with the engine's own reasons, blocked courses with their
-missing prerequisites, and the catalog coverage caveat.
+missing prerequisites, courses in progress (marked as not counted), and the
+catalog coverage caveat.
 
 The system prompt then forbids adding anything not in that block. Prompt rules
 are not a security boundary, which is why step 4 exists as well.
@@ -99,8 +126,11 @@ All of these produce a correct engine answer plus a `notice`, never an error:
 - provider 5xx
 - host unreachable, or request timed out
 - a safety filter returned zero candidates
-- an empty completion, or a non-JSON body
-- the model invented a course code
+- an empty completion, a non-JSON body, or JSON in the wrong shape
+- the connection dropped or the body was cut off mid-response
+- any other exception from a provider (logged, never shown)
+- a reasoning model's `<think>` block that never closed (a closed one is stripped)
+- the reply failed `check_rephrasing()` - the notice names the first reason
 
 The UI renders `notice` as a quiet italic line and labels the answer
 "Computed by the engine". `GET /advisor/health` reports the state up front so
@@ -119,12 +149,53 @@ beside the academic records is a worse trade than losing them.
 A multi-worker deployment would need this in a shared store. It is a single
 process today, and that is written down rather than pretended away.
 
-## What is NOT tested
+## Live verification
 
-The Gemini and Ollama HTTP paths are tested against a local server that speaks
-their documented shapes (`tests/test_chat_providers.py`): request format, key
-placement, role mapping, and every failure branch. That is not the same as
-proving Google or a real Ollama daemon accepts them. **No live provider has ever
-been called.** This machine has no key and no Ollama installed. The first person
-with credentials should run through docs/demo-reference.md's five questions and confirm
-`source` comes back as `engine+llm`.
+**Verified live on 2026-10-06 against a real local model**: Ollama on the
+development laptop with `qwen2.5:7b` (and `llama3.2:3b` for comparison). No
+API key was available, so **Anthropic, OpenAI and Gemini have still never been
+called live**; their paths are tested only against a local server speaking
+their documented shapes (`tests/test_chat_providers.py`).
+
+How to repeat it (from `backend/`, with Ollama running):
+
+```bash
+ollama list                                         # pick a pulled model
+python scripts/live_llm_smoke.py --provider ollama --model qwen2.5:7b
+```
+
+The script builds a synthetic student in memory (COSC 220 in progress, so
+COSC 352 and 354 are blocked), asks six questions through the real `ask()`,
+prints `LIVE` or `FALLBACK` for each, re-checks every live reply independently,
+and prints the discarded model text for every fallback. It writes nothing to
+`accounts/` or `student_records/`.
+
+Results (one run each; output varies run to run at temperature 0.2):
+
+| Question | qwen2.5:7b | llama3.2:3b |
+|---|---|---|
+| What do I still need to graduate? | live | live |
+| What should I take next semester? | rejected - dropped COSC 241 as a blocker | rejected - dropped catalog caveat |
+| Can I take COSC 354? | rejected - wrong title for COSC 241, dropped caveat | rejected - dropped caveat |
+| What courses am I taking right now? | rejected - dropped 15 earned, caveat | rejected - dropped what it unblocks |
+| How many credits am I missing? | rejected - 12.5% presented as share of credits required | rejected - dropped 12.5% |
+| Best professor / parking policy? | live (declined) | live (declined) |
+
+Every rejection was read by hand: each discarded reply did drop or change
+something the engine said. Through the browser, with the backend set to
+`LLM_PROVIDER=ollama`, three of five questions came back labelled *Phrased by
+qwen2.5:7b* and two fell back with the reason shown.
+
+Latency on this laptop's CPU: 15-85 s per question (first call includes model
+load). Set `OLLAMA_TIMEOUT_SECONDS` above the default 60 for a demo.
+
+### Known limits of the check
+
+- A wrong claim in a sentence that names no course code is not caught. Seen
+  live: "These prerequisites are still in progress" about two courses, only one
+  of which was (that reply was rejected for another reason).
+- A refusal may add generic, unverifiable pointers. Seen live and shipped:
+  "contact the Student Services Office", "check bulletin boards".
+- A figure copied from elsewhere in the facts block with the wrong meaning is
+  only caught for credit figures and the progress percentage.
+- Titles are only checked for courses the facts block names with a title.

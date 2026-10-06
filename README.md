@@ -233,7 +233,8 @@ just removed, because it remains in the git history.
 
 | Symptom | Cause and fix |
 |---|---|
-| The advisor says "running on the degree engine" | Expected with no API key. Answers are still correct - they are computed, not generated. Set `GEMINI_API_KEY` (or run Ollama) to have a model phrase them. |
+| The advisor says "running on the degree engine" | Expected with no API key. Answers are still correct - they are computed, not generated. Set `GEMINI_API_KEY`, or run Ollama with `LLM_PROVIDER=ollama` and `OLLAMA_CHAT_MODEL` set to a model `ollama list` shows (the default `llama3.1` is often not pulled). |
+| Ollama answers come back "Computed by the engine" with a notice | The model's phrasing failed the consistency check and was discarded; the notice says why. Expected for most answers from small local models. |
 | PDF upload fails, tests pass | Installed without the `ingestion` extra. Re-run `pip install -e ".[dev,ingestion]"`. |
 | A `.env` value has no effect | The file is at the repo root. It must be `backend/.env`. |
 | Signed out after every restart | `JWT_SECRET` unset, so the key is regenerated per process. Set it in `backend/.env`. |
@@ -308,7 +309,8 @@ The same data is served read-only over HTTP:
 | 1 | Accounts, sign-in, per-student authorisation | **Done** (PR #5) |
 | 1 | React frontend: upload → review → dashboard | **Done** (PR #5) |
 | 1 | **Conversational advisor** | **Done** — see [docs/advisor.md](docs/advisor.md) |
-| 2 | **Voice input (Web Speech API)** | **Not started** |
+| 1 | **Live model phrasing, checked against the engine** | **Verified live with Ollama** (`qwen2.5:7b`, Oct 2026); hosted providers untested |
+| 2 | **Voice input** | **Not on `main`** - unmerged Deepgram branch `feature/voice-input`, under team review |
 | 3 | What-if simulation, multi-term planning | Not started |
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript
@@ -316,14 +318,14 @@ or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps 
 recommendations → ask the advisor questions about it. 604 backend tests pass, and
 the whole path is verified in a real browser.
 
-**What does not exist yet:** voice input. The "multimodal" claim rests on text and
-PDF parsing; vision extraction of scanned documents is implemented but needs an
-API key to run.
+**What does not exist yet on `main`:** voice input. The "multimodal" claim rests
+on text and PDF parsing; vision extraction of scanned documents is implemented
+but needs an API key to run.
 
-**Not yet verified:** no live LLM provider has ever been called - this machine has
-no key and no Ollama. The advisor answers from the degree engine, which is the
-supported mode, and the model-phrasing path is tested only against a local stub.
-See [docs/advisor.md](docs/advisor.md#what-is-not-tested).
+**Verified live:** a local Ollama model (`qwen2.5:7b`) phrasing advisor answers,
+with every reply checked against the engine and discarded if it changes a fact.
+**Not yet verified:** Anthropic, OpenAI and Gemini - no key. See
+[docs/advisor.md](docs/advisor.md#live-verification).
 
 See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the detailed handover, known bugs,
 and the reasoning behind decisions that look wrong but are not.

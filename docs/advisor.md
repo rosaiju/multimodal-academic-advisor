@@ -49,7 +49,7 @@ called twice.
 **Step 2** is why the demo works with no API key, no credits and no internet.
 Both student credit applications were still pending when this was built, and a
 capstone that cannot be demonstrated because of someone else's quota is not
-finished. Every question in DEMO_GUIDE.md is answered correctly with no provider
+finished. Every question in docs/demo-reference.md is answered correctly with no provider
 configured at all.
 
 **Step 4** is the part that would be easy to skip. A model that says "take
@@ -126,5 +126,5 @@ their documented shapes (`tests/test_chat_providers.py`): request format, key
 placement, role mapping, and every failure branch. That is not the same as
 proving Google or a real Ollama daemon accepts them. **No live provider has ever
 been called.** This machine has no key and no Ollama installed. The first person
-with credentials should run through DEMO_GUIDE.md's five questions and confirm
+with credentials should run through docs/demo-reference.md's five questions and confirm
 `source` comes back as `engine+llm`.

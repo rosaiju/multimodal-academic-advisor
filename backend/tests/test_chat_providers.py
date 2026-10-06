@@ -9,7 +9,7 @@ talk to it. That is as far as honesty allows without credentials: it verifies th
 request we send and the reply we parse are the shapes each vendor documents, and
 that every failure mode degrades. It does NOT verify that Google or a local
 Ollama accepts them - only a real key and a real daemon can, and neither exists
-on this machine. See DEMO_GUIDE.md.
+on this machine. See docs/demo-reference.md.
 """
 
 from __future__ import annotations

@@ -20,6 +20,7 @@ offline fallback would defeat the point of having one.
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import urllib.error
@@ -78,7 +79,7 @@ def _http_json(url: str, payload: dict, *, timeout: float, headers: dict | None 
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode())
+            data = json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:300]
         if exc.code in (401, 403):
@@ -96,8 +97,16 @@ def _http_json(url: str, payload: dict, *, timeout: float, headers: dict | None 
         raise ProviderUnavailable(f"cannot reach the provider: {exc.reason}") from exc
     except TimeoutError as exc:
         raise ProviderUnavailable("the model did not respond in time") from exc
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ProviderUnavailable(f"provider returned a non-JSON body: {exc}") from exc
+    except (http.client.HTTPException, OSError) as exc:
+        # A dropped connection or truncated body mid-response: RemoteDisconnected,
+        # IncompleteRead, ConnectionResetError. Ollama does this when it is killed
+        # or runs out of memory loading a model.
+        raise ProviderUnavailable(f"the connection to the provider failed: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ProviderUnavailable(f"provider returned {type(data).__name__}, not a JSON object")
+    return data
 
 
 class AnthropicChatProvider:
@@ -212,15 +221,19 @@ class GeminiChatProvider:
             headers={"x-goog-api-key": self._api_key},
         )
         candidates = data.get("candidates") or []
-        if not candidates:
+        if not isinstance(candidates, list) or not candidates:
             blocked = (data.get("promptFeedback") or {}).get("blockReason")
             raise ProviderUnavailable(
                 f"gemini returned no candidates (blockReason={blocked})"
                 if blocked
                 else "gemini returned no candidates"
             )
-        parts = (candidates[0].get("content") or {}).get("parts") or []
-        text = "".join(p.get("text", "") for p in parts).strip()
+        first = candidates[0] if isinstance(candidates[0], dict) else {}
+        content = first.get("content") if isinstance(first.get("content"), dict) else {}
+        parts = content.get("parts") if isinstance(content.get("parts"), list) else []
+        text = "".join(
+            p["text"] for p in parts if isinstance(p, dict) and isinstance(p.get("text"), str)
+        ).strip()
         if not text:
             raise ProviderUnavailable("gemini returned an empty completion")
         return text
@@ -271,7 +284,9 @@ class OllamaChatProvider:
             ],
         }
         data = _http_json(f"{self._base}/api/chat", payload, timeout=self._timeout)
-        text = ((data.get("message") or {}).get("content") or "").strip()
+        message = data.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        text = content.strip() if isinstance(content, str) else ""
         if not text:
             raise ProviderUnavailable("ollama returned an empty completion")
         return text

@@ -229,3 +229,108 @@ class TestProviderSelection:
     def test_chat_model_follows_the_provider(self) -> None:
         assert Settings(llm_provider="gemini").chat_model.startswith("gemini")
         assert Settings(llm_provider="ollama").chat_model == "llama3.1"
+
+
+class TestMalformedAndBrokenResponses:
+    """Shapes a real server can produce that the happy path never sees.
+
+    Each must surface as ProviderUnavailable - the advisor's cue to ship the
+    engine's answer - and never as an AttributeError that becomes a 500.
+    """
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            '["not", "an", "object"]',
+            {"message": "a string, not an object"},
+            {"message": {"content": 42}},
+            {"message": None},
+            "not json at all",
+        ],
+    )
+    def test_ollama_malformed_body(self, server, body) -> None:
+        httpd, base = server
+        Recorder.body = body
+        with pytest.raises(ProviderUnavailable):
+            OllamaChatProvider(base, "llama3.1").complete(system="s", messages=MESSAGES)
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"candidates": "nope"},
+            {"candidates": [None]},
+            {"candidates": [{"content": "flat string"}]},
+            {"candidates": [{"content": {"parts": [{"text": 7}, "junk"]}}]},
+            "null",
+        ],
+    )
+    def test_gemini_malformed_body(self, server, body) -> None:
+        httpd, base = server
+        Recorder.body = body
+        provider = GeminiChatProvider("test-key", "gemini-2.0-flash")
+        provider.API = f"{base}/v1beta/models"
+        with pytest.raises(ProviderUnavailable):
+            provider.complete(system="s", messages=MESSAGES)
+
+
+class _SilentHandler(BaseHTTPRequestHandler):
+    """Accepts the request, then says nothing until the client gives up."""
+
+    def do_POST(self):  # noqa: N802
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        import time
+
+        time.sleep(1.5)
+
+    def log_message(self, *args):
+        pass
+
+
+class _HangUpHandler(BaseHTTPRequestHandler):
+    """Promises a body, sends half of it, and closes the connection."""
+
+    def do_POST(self):  # noqa: N802
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", "500")
+        self.end_headers()
+        self.wfile.write(b'{"message": {"content": "You ne')
+        self.wfile.flush()
+        self.connection.close()
+
+    def log_message(self, *args):
+        pass
+
+
+def _serve(handler):
+    httpd = HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd
+
+
+class TestNetworkFailures:
+    def test_timeout_is_unavailable_not_a_hang(self) -> None:
+        httpd = _serve(_SilentHandler)
+        try:
+            provider = OllamaChatProvider(
+                f"http://127.0.0.1:{httpd.server_port}", "llama3.1", timeout=0.3
+            )
+            with pytest.raises(ProviderUnavailable, match="in time|timed out"):
+                provider.complete(system="s", messages=MESSAGES)
+        finally:
+            httpd.shutdown()
+
+    def test_connection_dropped_mid_body(self) -> None:
+        httpd = _serve(_HangUpHandler)
+        try:
+            provider = OllamaChatProvider(f"http://127.0.0.1:{httpd.server_port}", "llama3.1")
+            with pytest.raises(ProviderUnavailable):
+                provider.complete(system="s", messages=MESSAGES)
+        finally:
+            httpd.shutdown()
+
+    def test_nothing_listening(self) -> None:
+        provider = OllamaChatProvider("http://127.0.0.1:1", "llama3.1", timeout=2)
+        with pytest.raises(ProviderUnavailable, match="cannot reach"):
+            provider.complete(system="s", messages=MESSAGES)

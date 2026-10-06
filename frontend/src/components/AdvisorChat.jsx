@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { askAdvisor, getAdvisorHealth, resetConversation } from '../api'
 import { Alert, Button, Card, Spinner } from './ui'
+import { useLiveTranscription } from './useLiveTranscription'
 
 /**
  * The conversational advisor.
@@ -19,6 +20,20 @@ import { Alert, Button, Card, Spinner } from './ui'
 
 const CONVERSATION_ID = 'default'
 
+/** Below this Deepgram confidence the student is asked to check the text. */
+const LOW_CONFIDENCE = 0.6
+
+const VOICE_MESSAGES = {
+  empty: "Didn't catch that — try again.",
+  lowConfidence: 'Check this — I may have misheard.',
+}
+
+/** Speech is added after anything already typed, never in place of it. */
+function mergeDraft(current, spoken) {
+  const typed = current.trim()
+  return typed ? `${typed} ${spoken}` : spoken
+}
+
 export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [health, setHealth] = useState(null)
   const [messages, setMessages] = useState([])
@@ -26,6 +41,33 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const scroller = useRef(null)
+  const input = useRef(null)
+  const [voiceNote, setVoiceNote] = useState(null)
+
+  const handleVoiceDone = useCallback(({ text, confidence }) => {
+    const spoken = text.trim()
+    if (!spoken) {
+      setVoiceNote(VOICE_MESSAGES.empty)
+      return
+    }
+    // The input is read-only while listening, so `current` is what was typed first.
+    setDraft((current) => mergeDraft(current, spoken))
+    setVoiceNote(confidence < LOW_CONFIDENCE ? VOICE_MESSAGES.lowConfidence : null)
+    input.current?.focus()
+  }, [])
+
+  const voice = useLiveTranscription({ onDone: handleVoiceDone })
+  const voiceOn = Boolean(health?.voice_available)
+  const voiceBusy = voice.listening
+
+  function toggleListening() {
+    setVoiceNote(null)
+    if (voice.listening) {
+      voice.stop()
+    } else {
+      voice.start()
+    }
+  }
 
   useEffect(() => {
     getAdvisorHealth()
@@ -44,6 +86,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
     if (!question || busy) return
     setError(null)
     setDraft('')
+    setVoiceNote(null)
     setMessages((prev) => [...prev, { role: 'user', text: question }])
     setBusy(true)
     try {
@@ -158,7 +201,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
                 key={question}
                 type="button"
                 onClick={() => send(question)}
-                disabled={busy}
+                disabled={busy || voiceBusy}
                 className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 {question}
@@ -179,17 +222,37 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </label>
           <input
             id="advisor-question"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            ref={input}
+            value={voice.listening ? mergeDraft(draft, voice.liveText) : draft}
+            readOnly={voice.listening}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              setVoiceNote(null)
+            }}
             placeholder="What should I take next semester?"
             disabled={busy}
             maxLength={2000}
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
           />
-          <Button type="submit" disabled={busy || !draft.trim()}>
+          {voiceOn && (
+            <MicButton
+              listening={voice.listening}
+              disabled={busy || !voice.supported}
+              onClick={toggleListening}
+            />
+          )}
+          <Button type="submit" disabled={busy || voiceBusy || !draft.trim()}>
             Ask
           </Button>
         </form>
+
+        {voiceOn && (voiceNote || voice.error || !voice.supported) && (
+          <p className="mt-2 text-xs text-slate-500" role="status">
+            {voiceNote ??
+              voice.error ??
+              'This browser cannot record audio. You can still type your question.'}
+          </p>
+        )}
       </Card>
 
       <p className="text-center text-xs text-slate-400">
@@ -239,5 +302,30 @@ function AdvisorTurn({ reply }) {
         {reply.notice && <p className="px-1 text-xs italic text-slate-400">{reply.notice}</p>}
       </div>
     </div>
+  )
+}
+
+/** Click to start listening; click again to stop early. It also stops on a pause. */
+function MicButton({ listening, disabled, onClick }) {
+  const label = listening ? 'Stop listening' : 'Ask by voice'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled && !listening}
+      aria-pressed={listening}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full ring-1 ring-inset transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        listening
+          ? 'animate-pulse bg-rose-600 text-white ring-rose-600'
+          : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="12" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeLinecap="round" />
+      </svg>
+    </button>
   )
 }

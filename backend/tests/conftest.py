@@ -64,6 +64,37 @@ def _clean_throttle():
     login_throttle.reset()
 
 
+#: Provider settings a developer's backend/.env may set. Environment variables
+#: outrank the .env file, so blanking them here wins over whatever is on disk.
+_PROVIDER_ENV = {
+    "LLM_PROVIDER": "anthropic",
+    "ANTHROPIC_API_KEY": "",
+    "OPENAI_API_KEY": "",
+    "GEMINI_API_KEY": "",
+    "DEEPGRAM_API_KEY": "",
+}
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _no_real_provider_keys():
+    """No test sees the keys in a developer's backend/.env.
+
+    Without this, putting a real key in .env for the demo turned seven ingestion
+    tests red, because they assume no vision model is configured. A test that
+    needs a provider sets one itself.
+
+    Session-scoped on purpose: module-scoped fixtures (test_catalog_router.py)
+    start the app before any function-scoped fixture runs, and app startup
+    registers the vision extractor process-wide from whatever settings it sees.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        for name, value in _PROVIDER_ENV.items():
+            patch.setenv(name, value)
+        get_settings.cache_clear()
+        yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def anon_client(tmp_path, monkeypatch):
     """A client with NO account signed in. For testing the 401s."""

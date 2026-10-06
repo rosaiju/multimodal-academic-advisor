@@ -172,10 +172,21 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   them, so "what am I taking now?" was answered with completed courses. Fixed on
   the same branch: an `in_progress` intent, and blockers say which prerequisite
   is under way.
-- **No voice input on `main`.** SawcyD's `origin/feature/voice-input` (8 commits,
-  Sep 22, no PR) implements voice through Deepgram, not the Web Speech API the
-  plan named; it changes `AdvisorChat.jsx`. Whether to merge it, replace it, or
-  add Web Speech as the no-key fallback is a team decision and is not made here.
+- ~~**No voice input.**~~ **Built by SawcyD and live-verified (Sep 22 2026); integrated with the advisor on `feature/deepgram-voice-integration` (Oct 2026).** Mic in the
+  advisor panel, Deepgram `nova-3` behind `POST /advisor/transcribe`, with
+  catalog course codes as keyterms. **First call from this repo to a live
+  external service:** a synthesized WAV of "What can I take after COSC 241?" came
+  back from real Deepgram as `What can I take after COSC 241?` (confidence 0.99),
+  and Deepgram accepted all 76 keyterms. Caveat: a TTS voice pronounces "COSC"
+  cleanly, so the same result came back without keyterms; a human speaker is the
+  real test of whether they help.
+  **Live streaming (Sep 22 2026):** words stream into the box through
+  `WS /advisor/listen`; the session ends on Deepgram's UtteranceEnd ~1.5 s after
+  speech. Live check through `DeepgramLive` (continuous PCM): partials grew from
+  0.9 s, final `Can I take UNIV 101 or COSC 243?` at 4.8 s, UtteranceEnd at 5.9 s.
+  End-to-end through the real route to real Deepgram: `What do I need before
+  COSC 241 and MATH 141?` (confidence 0.989). Not yet tried with a human voice in
+  the browser. See [docs/advisor.md](docs/advisor.md#voice-input).
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in docs/demo-reference.md is answered correctly with no provider configured.

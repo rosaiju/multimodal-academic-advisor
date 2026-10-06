@@ -49,6 +49,21 @@ class Settings(BaseSettings):
     #: Hard ceiling so a runaway tool-calling loop cannot burn the team's credits.
     max_tokens_per_session: int = 50_000
 
+    # --- Voice input ---
+    #: Deepgram speech-to-text. Empty means voice input is off: the mic button is
+    #: hidden and typing works exactly as before. Voice is an input channel only;
+    #: it never changes how an answer is computed.
+    deepgram_api_key: str = ""
+    deepgram_model: str = "nova-3"
+    #: Overridden by tests to point at a loopback fake.
+    deepgram_base_url: str = "https://api.deepgram.com"
+    #: Seconds. A spoken question is a few seconds of audio; a request still
+    #: running after this is a network problem, not a long transcription.
+    deepgram_timeout_seconds: float = 20.0
+    #: About a minute of compressed speech. The client stops at 30 s; this is the
+    #: server's own guard, not a policy about question length.
+    max_audio_bytes: int = 2 * 1024 * 1024
+
     # --- Storage ---
     database_url: str = "sqlite:///./advisor.db"
     catalog_dir: Path = REPO_ROOT / "data" / "catalog"

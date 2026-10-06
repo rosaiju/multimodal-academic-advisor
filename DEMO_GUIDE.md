@@ -113,6 +113,13 @@ Untick one row, point out the count change, re-tick it, then click
 > *absent, not failed*. A percentage there would be a confident lie, so there's a
 > paragraph explaining the gap instead."
 
+**Voice (needs `DEEPGRAM_API_KEY`, use Chrome).** Click the mic once and say
+*"Can I take computer science two forty three?"*. The words appear as you speak,
+and 1.5 s after you stop, the box reads **"Can I take COSC 243?"** - converted
+because COSC 243 is in the catalog. Point out that it was **not** sent: the
+student checks it first, the same rule as the transcript review screen. Then
+press Ask.
+
 ---
 
 ## 1:50 – 2:30 — The advisor

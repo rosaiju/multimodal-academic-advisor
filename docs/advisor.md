@@ -149,6 +149,43 @@ beside the academic records is a worse trade than losing them.
 A multi-worker deployment would need this in a shared store. It is a single
 process today, and that is written down rather than pretended away.
 
+## Voice input
+
+The mic in the advisor panel is an input channel only. It turns speech into text
+for the question box and never asks the advisor anything itself.
+
+- **Flow (live):** browser mic → `MediaRecorder` chunks every 250 ms → WebSocket
+  `/advisor/listen` (token in the first message, never the URL) → backend relay
+  (`app/routers/voice.py`) → Deepgram live `wss /v1/listen` (`nova-3`,
+  `smart_format`, `mip_opt_out`, `interim_results`, `endpointing=300`,
+  `utterance_end_ms=1500`). The box shows finished phrases plus the phrase still
+  being heard, course codes converted, and the session ends 1.5 s after the
+  student stops talking (or on a click, 30 s, 8 s of silence, or 2 MB).
+- **Key terms:** every catalog course code in spoken form ("COSC 241") is sent as
+  a Deepgram `keyterm`, built by `app/speech/keyterms.py` from the loaded catalog.
+- **Spoken numbers:** Deepgram writes "Computer Science two forty three" as
+  words (its `numerals` option makes it "2 43"). `app/speech/course_codes.py`
+  rewrites these as `COSC 243`, and only when that code is in the catalog. An
+  unknown code is left exactly as heard, never guessed at.
+- **Never auto-sent.** When the session ends, the text stays in the box for the
+  student to check and edit - a live partial can be wrong for a moment (one test
+  showed "COSC two 480s" before it settled on "COSC 241"). Below 0.6 average
+  confidence the panel asks them to check it.
+- `POST /advisor/transcribe` (record-then-upload) remains in the backend but the
+  UI no longer uses it.
+- **Browsers:** Chrome and Edge (webm/opus) are supported. Safari's mp4 chunks are
+  unverified; if Deepgram cannot decode them the student sees the unavailable note.
+- **Privacy:** audio is never saved. It exists for one request and is then
+  discarded, and Deepgram is told not to keep it for training. One caveat: the
+  web framework buffers any upload part over 1 MB in a temporary file for the
+  length of the request. A 30-second question is about 0.5 MB, so it stays in
+  memory in practice.
+- **Degrades like the model:** no `DEEPGRAM_API_KEY` means no mic button. A
+  rejected key, no credit, a rate limit or a timeout means a quiet note, and
+  typing still works. Deepgram's error text is logged, never shown.
+- `app/audit/` and `app/catalog/` may not import `app.speech`
+  (`test_no_llm_in_engine.py`).
+
 ## Live verification
 
 **Verified live on 2026-10-06 against a real local model**: Ollama on the

@@ -19,6 +19,7 @@ from app.routers import auth as auth_router
 from app.routers import catalog as catalog_router
 from app.routers import chat as chat_router
 from app.routers import ingest as ingest_router
+from app.routers import voice as voice_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ app.include_router(catalog_router.router)
 app.include_router(ingest_router.router)
 app.include_router(audit_router.router)
 app.include_router(chat_router.router)
+app.include_router(voice_router.router)
 
 # Remaining routers land here as each owner delivers them:
 #   app.include_router(students.router)  # Person 3

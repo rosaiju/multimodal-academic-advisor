@@ -182,6 +182,29 @@ class TestRecordedLiveReplies:
         problems = check(facts, "What should I take next semester?", reply)
         assert problems == ["drops course codes from the engine's answer: COSC241"]
 
+    def test_title_moved_to_the_wrong_course(self, facts) -> None:
+        """COSC 241 was given COSC 243's title, and both prerequisites were called
+        in progress. The title swap is caught; the 'in progress' sentence names no
+        code and is a known gap - this reply is also rejected for the warning."""
+        reply = (
+            "- **COSC354 Operating Systems (3 cr)** is required for the "
+            "major_required_courses block.\n"
+            "- You need to complete **COSC220 Data Structures and Algorithms (4 cr)** and "
+            "**COSC241 Computer Organization and Architecture (3 cr)** before you can take "
+            "COSC354.\n"
+            "- These prerequisites are still in progress, so you're not eligible to take "
+            "COSC354 yet."
+        )
+        problems = check(facts, "Can I take COSC 354?", reply)
+        assert any("gives COSC241 the title of another course" in p for p in problems)
+
+    def test_correct_titles_are_not_flagged(self, facts) -> None:
+        reply = (
+            "Not yet - COSC354 Operating Systems needs COSC220 Data Structures and "
+            "Algorithms, which you're taking now, and COSC241. The catalog is partial."
+        )
+        assert check(facts, "Can I take COSC 354?", reply) == []
+
     def test_correct_remaining_answer_is_accepted(self, facts) -> None:
         """Rejected by an earlier draft because '4 requirement blocks' collided with
         the 4 credits in progress. Matching by context fixed it."""
@@ -362,3 +385,14 @@ class TestAskFallbacks:
 
     def test_unterminated_reasoning_block_is_not_an_answer(self) -> None:
         assert _strip_reasoning("<think>still thinking about 17 credits") == ""
+
+
+def test_a_title_that_extends_another_is_not_a_swap(facts) -> None:
+    """Regression: 'MATH242 Calculus II' was read as MATH242 + 'Calculus I'."""
+    reply = (
+        "Eligible now: MATH241 Calculus I, MATH242 Calculus II, COSC281, COSC349, "
+        "COSC201 and COSC243. COSC352 needs COSC220 and COSC354 needs COSC220 and "
+        "COSC241, so not yet. The catalog is partial."
+    )
+    problems = check(facts, "What should I take next semester?", reply)
+    assert not any("title" in p for p in problems), problems

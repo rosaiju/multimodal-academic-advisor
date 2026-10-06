@@ -309,6 +309,11 @@ def check_rephrasing(
         ):
             problems.append(f"implies the student can graduate: {sentence.strip()!r}")
 
+    # 6b. A course keeps its own title. Seen live: "COSC241 Computer Organization
+    # and Architecture", which is COSC243's title.
+    for code, title in _swapped_titles(text, facts):
+        problems.append(f"gives {code} the title of another course ({title!r})")
+
     # 7. The partial-catalog warning survives.
     if _PARTIAL_CATALOG.search(prepared_text) and not _PARTIAL_CATALOG.search(text):
         problems.append("drops the warning that the encoded catalog is partial")
@@ -328,3 +333,41 @@ def check_rephrasing(
 
 def _codes(recs) -> set[str]:
     return {r.course.code.replace(" ", "").upper() for r in recs}
+
+
+def _titles(facts: AdvisorFacts) -> dict[str, str]:
+    """Course code -> title, for every course the facts block names with a title."""
+    titles = {
+        code.replace(" ", "").upper(): title
+        for code, title, _ in [*facts.completed, *facts.in_progress]
+        if title
+    }
+    for rec in [*facts.recommended, *facts.blocked]:
+        if rec.course.title:
+            titles[rec.course.code.replace(" ", "").upper()] = rec.course.title
+    return titles
+
+
+def _swapped_titles(text: str, facts: AdvisorFacts) -> list[tuple[str, str]]:
+    """(code, title) where `text` writes a code followed by a different course's title.
+
+    Only titles the facts block supplied are recognised, so this catches a title
+    moved between two known courses - the failure that was seen - and not every
+    possible invented one.
+    """
+    titles = _titles(facts)
+    swapped: list[tuple[str, str]] = []
+    for match in COURSE_CODE.finditer(text):
+        if match.group(1).upper() not in facts.catalog_subjects:
+            continue
+        code = _code(match)
+        after = re.sub(r"^[\s*_:\-]+", "", text[match.end() : match.end() + 120]).lower()
+        # Longest first, whole words only: "Calculus II" must not read as "Calculus I".
+        for other, title in sorted(titles.items(), key=lambda item: -len(item[1])):
+            lowered = title.lower()
+            if not re.match(re.escape(lowered) + r"(?![\w])", after):
+                continue
+            if other != code and titles.get(code, "").lower() != lowered:
+                swapped.append((code, title))
+            break
+    return list(dict.fromkeys(swapped))

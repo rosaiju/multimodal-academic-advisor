@@ -1,8 +1,8 @@
 # Project status — COSC 490 Multimodal AI Academic Advisor
 
 Last updated: **2026-10-06**
-Branch: **`feature/live-llm-verification`** (local, not pushed, not merged) ·
-based on `docs/progress-report-1` (PR #7, open) · `main` is still `13efa15`
+Branch: **`feature/deepgram-voice-integration`** (PR open, not merged) · `main` is
+`c165ddf` (PR #7 and PR #8, the live-LLM work, merged 2026-10-06)
 
 This file is the handover between working sessions. It records what is true right
 now, not what we intend — anything listed as working has been run.
@@ -187,6 +187,11 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   End-to-end through the real route to real Deepgram: `What do I need before
   COSC 241 and MATH 141?` (confidence 0.989). Not yet tried with a human voice in
   the browser. See [docs/advisor.md](docs/advisor.md#voice-input).
+  **Integration (Oct 6 2026, `feature/deepgram-voice-integration`):** merged with
+  the live-LLM work; a spoken question gets the same engine answer as a typed one
+  and is never auto-sent. Tested in Chromium with its fake audio device and a
+  local fake Deepgram. **No Deepgram key was available for this round**, so the
+  integrated flow has not been run against real Deepgram or a human voice.
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in docs/demo-reference.md is answered correctly with no provider configured.

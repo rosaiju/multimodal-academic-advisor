@@ -185,6 +185,27 @@ for the question box and never asks the advisor anything itself.
   typing still works. Deepgram's error text is logged, never shown.
 - `app/audit/` and `app/catalog/` may not import `app.speech`
   (`test_no_llm_in_engine.py`).
+- **Into the advisor:** a finished transcript only fills the box. The student
+  presses Ask, and the question then takes the same route as a typed one -
+  `POST /advisor/chat`, the degree engine, and the rephrasing check.
+  `tests/test_voice_to_advisor.py` asserts that a spoken and a typed question get
+  the same answer, and that a voice session alone never reaches the advisor.
+- **In the UI:** a "Listening..." status while recording, and a standing note
+  that audio goes to Deepgram's speech service and nothing reaches the advisor
+  until Ask is pressed.
+
+### What has been verified, and how
+
+| Check | How | Live Deepgram? |
+|---|---|---|
+| Deepgram accepts our requests and keyterms; live streaming works | SawcyD, Sep 22, synthesized speech (see PROJECT_STATUS.md) | **yes** |
+| Relay, auth, limits, parsing, course-code conversion | backend tests with a scripted Deepgram fake | no |
+| Voice -> chat -> engine answer | `test_voice_to_advisor.py`, scripted fake | no |
+| Real browser: fake mic -> MediaRecorder -> relay -> UI box -> Ask -> answer, with live Ollama phrasing | Chromium's fake audio device, local fake Deepgram server (Oct 6) | no |
+| Blocked mic, unsupported browser | browser, with `getUserMedia` / `MediaRecorder` overridden | no |
+
+**Not yet verified:** a human voice through the browser to real Deepgram, and
+Safari or Firefox.
 
 ## Live verification
 

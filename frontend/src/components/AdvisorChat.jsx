@@ -246,11 +246,22 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </Button>
         </form>
 
-        {voiceOn && (voiceNote || voice.error || !voice.supported) && (
+        {voiceOn && voice.listening && (
+          <p className="mt-2 text-xs font-medium text-rose-700" role="status" aria-live="polite">
+            Listening… it stops when you pause, or click the mic to stop.
+          </p>
+        )}
+        {voiceOn && !voice.listening && (voiceNote || voice.error || !voice.supported) && (
           <p className="mt-2 text-xs text-slate-500" role="status">
             {voiceNote ??
               voice.error ??
               'This browser cannot record audio. You can still type your question.'}
+          </p>
+        )}
+        {voiceOn && (
+          <p className="mt-2 text-xs text-slate-400">
+            Voice input sends your audio to Deepgram&apos;s speech service to turn it into
+            text. It is not saved, and nothing goes to the advisor until you press Ask.
           </p>
         )}
       </Card>

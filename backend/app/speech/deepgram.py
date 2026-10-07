@@ -19,33 +19,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Literal
 
 from app.config import Settings, get_settings
 
+# Re-exported: these now live in app.speech.base, and existing imports keep working.
+from app.speech.base import SpeechError, SpeechErrorKind, Transcript
+
+__all__ = ["SpeechError", "SpeechErrorKind", "Transcript", "transcribe"]
+
 log = logging.getLogger(__name__)
-
-SpeechErrorKind = Literal["unavailable", "unreadable"]
-
-
-class SpeechError(RuntimeError):
-    """Transcription failed.
-
-    `unavailable`: the service cannot be used right now (no key, rejected key, no
-    credit, rate limited, down, unreachable, or a reply we could not parse).
-    `unreadable`: the service is fine but could not decode this recording.
-    """
-
-    def __init__(self, kind: SpeechErrorKind, message: str) -> None:
-        super().__init__(message)
-        self.kind: SpeechErrorKind = kind
-
-
-@dataclass(frozen=True)
-class Transcript:
-    text: str
-    confidence: float
 
 
 def _listen_url(settings: Settings, keyterms: Sequence[str]) -> str:

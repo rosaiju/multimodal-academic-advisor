@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     max_tokens_per_session: int = 50_000
 
     # --- Voice input ---
+    #: Which speech-to-text vendor the relay uses (see app/speech/registry.py).
+    #: Deepgram stays the default.
+    speech_provider: str = "deepgram"
     #: Deepgram speech-to-text. Empty means voice input is off: the mic button is
     #: hidden and typing works exactly as before. Voice is an input channel only;
     #: it never changes how an answer is computed.

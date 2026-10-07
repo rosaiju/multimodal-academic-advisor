@@ -22,33 +22,29 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from app.config import Settings, get_settings
+from app.speech.base import (
+    Final,
+    LiveEvent,
+    LiveSpeechProvider,
+    Partial,
+    SpeechError,
+    UtteranceEnd,
+)
 from app.speech.course_codes import normalize_course_mentions
-from app.speech.deepgram import SpeechError
+
+# The event types moved to app.speech.base; they stay importable from here.
+__all__ = [
+    "DeepgramLive",
+    "Final",
+    "LiveEvent",
+    "LiveTranscript",
+    "Partial",
+    "UtteranceEnd",
+    "live_url",
+    "parse_live_message",
+]
 
 log = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Partial:
-    """Deepgram's current guess at the phrase being spoken. Replaced, not kept."""
-
-    text: str
-
-
-@dataclass(frozen=True)
-class Final:
-    """A finished phrase. Kept."""
-
-    text: str
-    confidence: float
-
-
-@dataclass(frozen=True)
-class UtteranceEnd:
-    """Deepgram heard no words for utterance_end_ms: the speaker has paused."""
-
-
-LiveEvent = Partial | Final | UtteranceEnd
 
 
 def parse_live_message(raw: str | bytes) -> LiveEvent | None:
@@ -126,18 +122,32 @@ def live_url(settings: Settings, keyterms: Sequence[str]) -> str:
     return f"{base}/v1/listen?{urllib.parse.urlencode(params)}"
 
 
-class DeepgramLive:
+class DeepgramLive(LiveSpeechProvider):
     """One Deepgram live session. Every failure to connect is SpeechError("unavailable");
     a connection that drops later simply ends `events()`.
     """
 
+    name = "deepgram"
+
     def __init__(self) -> None:
         self._ws: ClientConnection | None = None
+        self._model = get_settings().deepgram_model
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @classmethod
+    def availability(cls, settings: Settings) -> tuple[bool, str]:
+        if not settings.deepgram_api_key:
+            return False, "no Deepgram key is configured"
+        return True, "ok"
 
     async def connect(
         self, keyterms: Sequence[str] = (), *, settings: Settings | None = None
     ) -> None:
         settings = settings or get_settings()
+        self._model = settings.deepgram_model
         if not settings.deepgram_api_key:
             raise SpeechError("unavailable", "no Deepgram key is configured")
         try:

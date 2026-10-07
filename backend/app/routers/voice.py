@@ -1,4 +1,4 @@
-"""WS /advisor/listen - live voice input, relayed to Deepgram.
+"""WS /advisor/listen - live voice input, relayed to the configured speech provider.
 
 The browser never talks to Deepgram and never sees the key. It signs in with
 its first message (a token in a URL ends up in logs), streams audio, and gets
@@ -21,9 +21,10 @@ from fastapi import APIRouter, WebSocket
 from app.auth.dependencies import user_for_token, user_store
 from app.catalog.registry import registry
 from app.config import Settings, get_settings
-from app.speech.deepgram import SpeechError
+from app.speech import registry as speech_registry
+from app.speech.base import Final, LiveSpeechProvider, Partial, SpeechError, UtteranceEnd
 from app.speech.keyterms import spoken_course_codes
-from app.speech.live import DeepgramLive, Final, LiveTranscript, Partial, UtteranceEnd
+from app.speech.live import LiveTranscript
 
 log = logging.getLogger(__name__)
 
@@ -81,13 +82,17 @@ async def listen(websocket: WebSocket) -> None:
     if not await _signed_in(websocket, settings):
         await _fail(websocket, "unauthorized")
         return
-    if not settings.deepgram_api_key:
+    if not speech_registry.availability(settings)[0]:
         await _fail(websocket, "unavailable")
         return
 
     programs = registry.list_programs()
     catalog_codes = [course.code for program in programs for course in program.courses]
-    live = DeepgramLive()
+    try:
+        live = speech_registry.create_live_provider(settings)
+    except SpeechError:
+        await _fail(websocket, "unavailable")
+        return
     try:
         await live.connect(spoken_course_codes(programs), settings=settings)
     except SpeechError:
@@ -100,7 +105,7 @@ async def listen(websocket: WebSocket) -> None:
 
 
 async def _relay(
-    websocket: WebSocket, live: DeepgramLive, catalog_codes: list[str], max_audio_bytes: int
+    websocket: WebSocket, live: LiveSpeechProvider, catalog_codes: list[str], max_audio_bytes: int
 ) -> None:
     transcript = LiveTranscript()
     if not await _send(websocket, {"type": "ready"}):

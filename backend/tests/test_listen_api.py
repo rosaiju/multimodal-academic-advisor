@@ -70,7 +70,7 @@ def voice_on(monkeypatch):
 
 
 def use(monkeypatch, fake: ScriptedLive) -> ScriptedLive:
-    monkeypatch.setattr(voice, "DeepgramLive", lambda: fake)
+    monkeypatch.setattr(voice.speech_registry, "create_live_provider", lambda settings=None: fake)
     return fake
 
 

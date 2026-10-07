@@ -230,8 +230,14 @@ def ask(
         )
 
     # Nothing to rephrase against: with no record, the deterministic text already
-    # says the right thing and a model could only pad it.
-    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD:
+    # says the right thing and a model could only pad it. What-if and unlock answers
+    # are never rephrased either: their figures come from re-running the engine on a
+    # copy of the record, and a model only adds a chance to misstate a difference.
+    if (
+        not use_llm
+        or facts is None
+        or prepared.intent in (Intent.NO_RECORD, Intent.WHAT_IF, Intent.UNLOCKS)
+    ):
         return finish(base)
 
     provider = provider or get_chat_provider()

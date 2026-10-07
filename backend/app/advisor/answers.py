@@ -25,10 +25,32 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from app.advisor.facts import AdvisorFacts
+from app.advisor.facts import AdvisorFacts, _subject_of
+from app.audit.impact import PrereqNode, UnlockEntry, explore_unlocks
+from app.audit.simulation import SimulationRequest, simulate
 
 #: Matches "COSC 220", "cosc220", "COSC-220".
 COURSE_CODE = re.compile(r"\b([A-Za-z]{2,5})[\s\-]?(\d{3})\b")
+
+_WHAT_IF_PHRASES = (
+    "what if",
+    "if i take",
+    "if i took",
+    "if i complete",
+    "if i finish",
+    "if i pass",
+    "if i add",
+    "if i were to",
+    "would my plan look",
+    "what would happen if",
+)
+#: Mentioning a course alongside one of these is an unlock/prerequisite question.
+_UNLOCK_PHRASES = re.compile(
+    r"\bunlock|\bopens? up|depends? on|leads? to|\bafter\b|"
+    r"\bneed before|\bbefore (?:i can )?(?:take|taking)|prerequisite|prereq|required for"
+)
+#: These make a what-if mean "once I have passed it" rather than "this coming term".
+_COMPLETION_WORDS = re.compile(r"\b(complete|completed|finish|finished|pass|passed|done with)\b")
 
 
 class Intent(StrEnum):
@@ -40,6 +62,8 @@ class Intent(StrEnum):
     COURSE_INFO = "course_info"
     PROGRESS = "progress"
     IN_PROGRESS = "in_progress"
+    WHAT_IF = "what_if"
+    UNLOCKS = "unlocks"
     NO_RECORD = "no_record"
     UNKNOWN = "unknown"
 
@@ -70,6 +94,14 @@ def detect_intent(question: str) -> Intent:
         "recommend" in q or "suggest" in q or "should i take" in q or "this course" in q
     ):
         return Intent.WHY_RECOMMENDED
+
+    # Before NEXT_SEMESTER and MAJOR_COMPLETE: "what if I take COSC 220 next
+    # semester" mentions next semester but is a simulation, not a recommendation.
+    if any(k in q for k in _WHAT_IF_PHRASES):
+        return Intent.WHAT_IF
+
+    if _UNLOCK_PHRASES.search(q) and COURSE_CODE.search(q):
+        return Intent.UNLOCKS
 
     if any(k in q for k in ("major requirement", "major complete", "finished my major")) or (
         "major" in q and any(k in q for k in ("done", "complete", "finish", "satisfied"))
@@ -530,6 +562,155 @@ def answer_progress(facts: AdvisorFacts) -> GroundedAnswer:
     )
 
 
+def _catalog_codes_in(facts: AdvisorFacts, question: str) -> list[str]:
+    """Course codes in the question, in order, de-duplicated, catalog subjects only.
+
+    The raw pattern also matches "need 101 more"; only a subject the catalog
+    actually defines can be a course reference here.
+    """
+    seen: list[str] = []
+    for code in _codes_in(question):
+        if _subject_of(code) in facts.catalog_subjects and code not in seen:
+            seen.append(code)
+    return seen
+
+
+def _names(codes: list[str], limit: int = 8) -> str:
+    shown = ", ".join(codes[:limit])
+    return shown + (f" and {len(codes) - limit} more" if len(codes) > limit else "")
+
+
+def answer_what_if(facts: AdvisorFacts, question: str) -> GroundedAnswer:
+    codes = _catalog_codes_in(facts, question)
+    if not codes or facts.program is None or facts.record is None:
+        return GroundedAnswer(
+            text=(
+                "I can run a what-if on your record, but I need to know which courses. "
+                'Try, for example, "What if I take COSC 220 and COSC 281 together?" '
+                "Your actual record is never changed by a what-if."
+            ),
+            intent=Intent.WHAT_IF,
+            citations=[],
+            grounded=False,
+        )
+
+    mode = "completed" if _COMPLETION_WORDS.search(_norm(question)) else "same_term"
+    result = simulate(facts.program, facts.record, SimulationRequest(courses=codes, mode=mode))
+    applied = [c.code for c in result.applied]
+    lines: list[str] = []
+
+    if applied:
+        lines.append(
+            f"What-if (your real record is unchanged): if you pass {_names(applied)}, then:"
+        )
+        before, after = result.before, result.after
+        lines.append(
+            f"- Credits earned go from {before.credits_earned} to {after.credits_earned} "
+            f"(+{result.credits_added}); credits still needed go from "
+            f"{before.credits_remaining} to {after.credits_remaining}."
+        )
+        if result.newly_satisfied_blocks:
+            names = "; ".join(b.name for b in result.newly_satisfied_blocks)
+            lines.append(f"- Requirements newly satisfied: {names}.")
+        moved = [b for b in result.changed_blocks if b not in result.newly_satisfied_blocks]
+        if moved:
+            lines.append(
+                "- Requirements that move forward: " + "; ".join(b.name for b in moved) + "."
+            )
+        if not result.changed_blocks:
+            lines.append("- No encoded requirement changes (they count as general credit).")
+        if result.newly_unlocked:
+            lines.append(
+                "- Newly eligible courses: " + _names([c.code for c in result.newly_unlocked]) + "."
+            )
+        else:
+            lines.append("- No new courses become eligible.")
+        if result.still_blocked:
+            blocked = "; ".join(
+                f"{b.course.code} (needs {', '.join(b.missing_prerequisites) or 'unknown'})"
+                for b in result.still_blocked[:4]
+            )
+            lines.append(f"- Still blocked: {blocked}.")
+    else:
+        lines.append("Nothing could be simulated, so there is no change to report.")
+
+    for skip in result.skipped:
+        extra = f" ({', '.join(skip.missing_prerequisites)} missing)"
+        if not skip.missing_prerequisites:
+            extra = ""
+        lines.append(f"- Not simulated: {skip.code} - {skip.detail}{extra}.")
+    lines += [f"Note: {w}" for w in result.warnings]
+    return GroundedAnswer(
+        text="\n".join(lines),
+        intent=Intent.WHAT_IF,
+        citations=[*applied, *(c.code for c in result.newly_unlocked)],
+    )
+
+
+def _label(node: PrereqNode) -> str:
+    return f"{node.code} ({node.status})" if node.status else str(node.code)
+
+
+def _flatten(node: PrereqNode) -> list[str]:
+    parts: list[str] = []
+    for child in node.children:
+        if child.any_of:
+            parts.append("(" + " or ".join(_label(c) for c in child.children) + ")")
+        else:
+            parts.append(_label(child))
+    return parts
+
+
+def _describe_unlock(e: UnlockEntry) -> str:
+    if e.status == "completed":
+        return f"{e.course.code} (already completed)"
+    if e.status == "in_progress":
+        return f"{e.course.code} (in progress now)"
+    if not e.missing_prerequisites:
+        return f"{e.course.code} (you can take it now)"
+    if not e.missing_after:
+        return f"{e.course.code} (this course is all you are missing)"
+    return f"{e.course.code} (would still need {', '.join(e.missing_after)})"
+
+
+def answer_unlocks(facts: AdvisorFacts, question: str) -> GroundedAnswer:
+    codes = _catalog_codes_in(facts, question)
+    if not codes or facts.program is None or facts.record is None:
+        return answer_unknown(facts)
+    report = explore_unlocks(facts.program, facts.record, codes[0])
+    if not report.known or report.course is None or report.prerequisite_tree is None:
+        return GroundedAnswer(
+            text=(
+                f"{report.code} is not in the encoded catalog, so I will not guess what it "
+                "needs or unlocks."
+            ),
+            intent=Intent.UNLOCKS,
+            citations=[],
+            grounded=False,
+        )
+
+    lines = [f"{report.code} {report.course.title}: status for you is {report.status}."]
+    needs = _flatten(report.prerequisite_tree)
+    lines.append("Prerequisites: " + (", ".join(needs) if needs else "none") + ".")
+    if report.direct_unlocks:
+        direct = "; ".join(_describe_unlock(e) for e in report.direct_unlocks)
+        lines.append(f"Directly unlocks: {direct}.")
+    else:
+        lines.append("It is not a prerequisite for any course in the encoded catalog.")
+    if report.downstream_unlocks:
+        later = _names([e.course.code for e in report.downstream_unlocks])
+        lines.append(f"Further down the chain: {later}.")
+    lines.append(
+        "This comes from the catalog's prerequisite graph; it does not know which sections "
+        "run in a given term."
+    )
+    return GroundedAnswer(
+        text="\n".join(lines) + _coverage_note(facts),
+        intent=Intent.UNLOCKS,
+        citations=[report.code, *(e.course.code for e in report.direct_unlocks)],
+    )
+
+
 def answer_unknown(facts: AdvisorFacts) -> GroundedAnswer:
     base = answer_progress(facts)
     return GroundedAnswer(
@@ -572,4 +753,8 @@ def deterministic_answer(facts: AdvisorFacts | None, question: str) -> GroundedA
         return answer_progress(facts)
     if intent is Intent.IN_PROGRESS:
         return answer_in_progress(facts)
+    if intent is Intent.WHAT_IF:
+        return answer_what_if(facts, question)
+    if intent is Intent.UNLOCKS:
+        return answer_unlocks(facts, question)
     return answer_unknown(facts)

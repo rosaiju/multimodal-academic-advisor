@@ -38,6 +38,8 @@ MAX_SESSION_SECONDS = 30.0
 NO_SPEECH_SECONDS = 8.0
 #: After asking Deepgram to finish, how long to wait for its last phrases.
 FINISH_GRACE_SECONDS = 2.0
+#: A vendor that transcribes the whole recording needs a request's worth of time.
+BATCH_FINISH_SECONDS = 25.0
 _WATCHDOG_TICK_SECONDS = 0.05
 
 
@@ -153,7 +155,11 @@ async def _relay(
             elapsed = loop.time() - started
             if elapsed >= MAX_SESSION_SECONDS:
                 return "time_limit"
-            if not transcript.heard_speech and elapsed >= NO_SPEECH_SECONDS:
+            if (
+                live.streams_partials
+                and not transcript.heard_speech
+                and elapsed >= NO_SPEECH_SECONDS
+            ):
                 return "no_speech"
 
     upstream = asyncio.create_task(from_browser())
@@ -172,7 +178,10 @@ async def _relay(
     # Let Deepgram flush the phrase it was still working on before answering.
     await live.finish()
     if not downstream.done():
-        await asyncio.wait({downstream}, timeout=FINISH_GRACE_SECONDS)
+        await asyncio.wait(
+            {downstream},
+            timeout=FINISH_GRACE_SECONDS if live.streams_partials else BATCH_FINISH_SECONDS,
+        )
         downstream.cancel()
     log.info("voice session ended: %s", reason)
     await _send(

@@ -80,6 +80,9 @@ class LiveSpeechProvider(ABC):
 
     #: Stable id used in SPEECH_PROVIDER and shown in status responses.
     name: str = ""
+    #: False for vendors that transcribe a finished recording: no partial text
+    #: while the student talks, and `finish()` is followed by a real wait.
+    streams_partials: bool = True
 
     @property
     @abstractmethod

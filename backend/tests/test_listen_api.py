@@ -21,6 +21,8 @@ WAIT_FOREVER = "wait_forever"
 
 
 class ScriptedLive:
+    streams_partials = True
+
     """Stands in for DeepgramLive. `script` items are events, float sleeps, or markers."""
 
     def __init__(self, script=(), *, connect_error: SpeechError | None = None):

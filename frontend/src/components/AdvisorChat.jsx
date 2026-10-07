@@ -23,6 +23,8 @@ const CONVERSATION_ID = 'default'
 /** Below this Deepgram confidence the student is asked to check the text. */
 const LOW_CONFIDENCE = 0.6
 
+const SPEECH_VENDORS = { deepgram: 'Deepgram', openai: 'OpenAI' }
+
 const VOICE_MESSAGES = {
   empty: "Didn't catch that — try again.",
   lowConfidence: 'Check this — I may have misheard.',
@@ -260,7 +262,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
         )}
         {voiceOn && (
           <p className="mt-2 text-xs text-slate-400">
-            Voice input sends your audio to Deepgram&apos;s speech service to turn it into
+            Voice input sends your audio to {SPEECH_VENDORS[health?.speech_provider] ?? 'a speech service'} to turn it into
             text. It is not saved, and nothing goes to the advisor until you press Ask.
           </p>
         )}

@@ -5,19 +5,22 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from app.config import Settings, get_settings
-from app.speech import deepgram
+from app.speech import deepgram, openai_stt
 from app.speech.base import LiveSpeechProvider, SpeechError, Transcript
 from app.speech.live import DeepgramLive
+from app.speech.openai_stt import OpenAILive
 
 #: name -> factory. Adding a vendor is one entry here plus its module.
 _FACTORIES: dict[str, Callable[[], LiveSpeechProvider]] = {
     "deepgram": DeepgramLive,
+    "openai": OpenAILive,
 }
 
 
 #: name -> one-shot transcription (POST /advisor/transcribe and the benchmark tool).
 _BATCH: dict[str, Callable[..., Transcript]] = {
     "deepgram": deepgram.transcribe,
+    "openai": openai_stt.transcribe,
 }
 
 

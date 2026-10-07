@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     #: server's own guard, not a policy about question length.
     max_audio_bytes: int = 2 * 1024 * 1024
 
+    #: OpenAI speech-to-text (SPEECH_PROVIDER=openai). Reuses OPENAI_API_KEY above.
+    #: Not streaming: audio is buffered and sent once when the student stops.
+    openai_stt_model: str = "gpt-4o-transcribe"
+    openai_base_url: str = "https://api.openai.com"
+    openai_stt_timeout_seconds: float = 30.0
+
     # --- Storage ---
     database_url: str = "sqlite:///./advisor.db"
     catalog_dir: Path = REPO_ROOT / "data" / "catalog"

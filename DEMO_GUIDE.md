@@ -143,8 +143,10 @@ because COSC 243 is in the catalog. Point out that it was **not** sent: the
 student checks it first, the same rule as the transcript review screen. Then
 press Ask.
 
-> Deepgram has been checked live only with a synthesized voice (Sep 22). Try
-> it once with your own voice before class.
+> Checked live on 2026-10-06 with a human voice in Chrome against real
+> Deepgram: two spoken questions transcribed cleanly and were only sent on Ask.
+> Allow the microphone before you start talking - a session that hears nothing
+> for 8 s ends quietly.
 
 ---
 
@@ -170,15 +172,17 @@ Close on the numbers:
 ## Optional: the live model (adds ~2 minutes, needs Ollama)
 
 Verified on the dev laptop on 2026-10-06 with `qwen2.5:7b`. Expect 15-85 s per
-answer on a laptop CPU, so ask one or two questions only, and warm the model up
-before class (ask anything once).
+answer on a laptop CPU (the first one, which loads the model, took about 3
+minutes with a 180 s timeout), so ask one or two questions only, and warm the
+model up before class (ask anything once). The 45 s timeout below means a slow
+model falls back to the engine's answer instead of keeping the class waiting.
 
 Start the backend with the model switched on instead of plain Terminal 1:
 
 ```powershell
 cd backend
 ollama list                                   # confirm qwen2.5:7b is pulled
-$env:LLM_PROVIDER="ollama"; $env:OLLAMA_CHAT_MODEL="qwen2.5:7b"; $env:OLLAMA_TIMEOUT_SECONDS="180"
+$env:LLM_PROVIDER="ollama"; $env:OLLAMA_CHAT_MODEL="qwen2.5:7b"; $env:OLLAMA_TIMEOUT_SECONDS="45"
 .venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 

@@ -18,6 +18,9 @@ dependencies = [
     # Access tokens. Password hashing uses stdlib hashlib.scrypt, so this is
     # the only dependency authentication adds.
     "pyjwt>=2.10",
+    # Deepgram's live API is a WebSocket. Already installed via uvicorn[standard];
+    # declared because app/speech/live.py imports it directly.
+    "websockets>=14",
     "python-dotenv>=1.0",
 ]
 

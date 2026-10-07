@@ -16,7 +16,7 @@ import pytest
 
 APP = Path(__file__).resolve().parents[1] / "app"
 PURE_PACKAGES = ["catalog", "audit"]
-FORBIDDEN_ROOTS = {"llm", "advisor", "anthropic", "openai"}
+FORBIDDEN_ROOTS = {"llm", "advisor", "speech", "anthropic", "openai"}
 
 
 def _python_files(package: str) -> list[Path]:

@@ -33,6 +33,11 @@ export function hasAccessToken() {
   return accessToken !== null
 }
 
+/** The in-memory token, for the voice socket's first message. Never put in a URL. */
+export function getAccessToken() {
+  return accessToken
+}
+
 async function request(path, options = {}) {
   const headers = { ...(options.headers ?? {}) }
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
@@ -151,6 +156,17 @@ export function askAdvisor({ message, conversationId = 'default', useLlm = true 
 /** DELETE /advisor/chat/{id} - forget one conversation. */
 export const resetConversation = (conversationId = 'default') =>
   request(`/advisor/chat/${encodeURIComponent(conversationId)}`, { method: 'DELETE' })
+
+/**
+ * WS /advisor/listen - live voice input.
+ *
+ * The token is sent as the first message once the socket opens, never in this
+ * URL: URLs end up in server and proxy logs. See useLiveTranscription.
+ */
+export function openLiveTranscription() {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return new WebSocket(`${scheme}://${window.location.host}${BASE}/advisor/listen`)
+}
 
 // ---- auth ----
 

@@ -310,7 +310,7 @@ The same data is served read-only over HTTP:
 | 1 | React frontend: upload → review → dashboard | **Done** (PR #5) |
 | 1 | **Conversational advisor** | **Done** — see [docs/advisor.md](docs/advisor.md) |
 | 1 | **Live model phrasing, checked against the engine** | **Verified live with Ollama** (`qwen2.5:7b`, Oct 2026); hosted providers untested |
-| 2 | **Voice input** | **Not on `main`** - unmerged Deepgram branch `feature/voice-input`, under team review |
+| 2 | **Voice input (Deepgram, by SawcyD)** | **Built and integrated** - checked live with a human voice and real Deepgram in Chrome (Oct 6); Safari/Firefox untested |
 | 3 | What-if simulation, multi-term planning | Not started |
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript
@@ -318,9 +318,9 @@ or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps 
 recommendations → ask the advisor questions about it. 604 backend tests pass, and
 the whole path is verified in a real browser.
 
-**What does not exist yet on `main`:** voice input. The "multimodal" claim rests
-on text and PDF parsing; vision extraction of scanned documents is implemented
-but needs an API key to run.
+**Voice input** needs `DEEPGRAM_API_KEY` in `backend/.env`; without it there is no
+mic button and typing works as before. Vision extraction of scanned documents is
+implemented but needs an API key to run.
 
 **Verified live:** a local Ollama model (`qwen2.5:7b`) phrasing advisor answers,
 with every reply checked against the engine and discarded if it changes a fact.

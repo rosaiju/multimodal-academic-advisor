@@ -18,11 +18,13 @@ import logging
 
 from fastapi import APIRouter, WebSocket
 
+from app.advisor.chat import conversations
 from app.auth.dependencies import user_for_token, user_store
 from app.catalog.registry import registry
 from app.config import Settings, get_settings
 from app.speech import registry as speech_registry
 from app.speech.base import Final, LiveSpeechProvider, Partial, SpeechError, UtteranceEnd
+from app.speech.clarify import subjects_in, suggest_clarifications
 from app.speech.keyterms import spoken_course_codes
 from app.speech.live import LiveTranscript
 
@@ -64,24 +66,33 @@ async def _fail(websocket: WebSocket, reason: str) -> None:
     await _close(websocket)
 
 
-async def _signed_in(websocket: WebSocket, settings: Settings) -> bool:
-    """True if the first message is a `start` carrying a valid token, in time."""
+async def _signed_in(websocket: WebSocket, settings: Settings) -> tuple[str, str] | None:
+    """(student_id, conversation_id) if the first message is a `start` carrying a
+    valid token, in time; otherwise None. The conversation id only selects which
+    earlier turns are used as context for clarifying a spoken course number."""
     try:
         message = await asyncio.wait_for(websocket.receive(), START_TIMEOUT_SECONDS)
         frame = json.loads(message.get("text") or "")
         token = frame.get("token") if frame.get("type") == "start" else None
+        conversation = frame.get("conversation_id", "default")
     except (TimeoutError, ValueError, AttributeError):
-        return False
+        return None
     if not isinstance(token, str) or not token:
-        return False
-    return user_for_token(token, settings, user_store(settings)) is not None
+        return None
+    user = user_for_token(token, settings, user_store(settings))
+    if user is None:
+        return None
+    if not isinstance(conversation, str) or not 0 < len(conversation) <= 64:
+        conversation = "default"
+    return user.student_id, conversation
 
 
 @router.websocket("/listen")
 async def listen(websocket: WebSocket) -> None:
     await websocket.accept()
     settings = get_settings()
-    if not await _signed_in(websocket, settings):
+    identity = await _signed_in(websocket, settings)
+    if identity is None:
         await _fail(websocket, "unauthorized")
         return
     if not speech_registry.availability(settings)[0]:
@@ -101,13 +112,17 @@ async def listen(websocket: WebSocket) -> None:
         await _fail(websocket, "unavailable")
         return
     try:
-        await _relay(websocket, live, catalog_codes, settings.max_audio_bytes)
+        await _relay(websocket, live, catalog_codes, settings.max_audio_bytes, identity)
     finally:
         await live.close()
 
 
 async def _relay(
-    websocket: WebSocket, live: LiveSpeechProvider, catalog_codes: list[str], max_audio_bytes: int
+    websocket: WebSocket,
+    live: LiveSpeechProvider,
+    catalog_codes: list[str],
+    max_audio_bytes: int,
+    identity: tuple[str, str] = ("", "default"),
 ) -> None:
     transcript = LiveTranscript()
     if not await _send(websocket, {"type": "ready"}):
@@ -184,12 +199,12 @@ async def _relay(
         )
         downstream.cancel()
     log.info("voice session ended: %s", reason)
-    await _send(
-        websocket,
-        {
-            "type": "done",
-            "text": transcript.text(catalog_codes),
-            "confidence": round(transcript.confidence, 3),
-        },
-    )
+    text = transcript.text(catalog_codes)
+    done = {"type": "done", "text": text, "confidence": round(transcript.confidence, 3)}
+    # A bare number ("four fifty nine") is offered back as a question, never applied.
+    context = subjects_in(conversations.recent_text(*identity), catalog_codes)
+    questions = suggest_clarifications(text, catalog_codes, context)
+    if questions:
+        done["clarifications"] = [q.as_dict() for q in questions]
+    await _send(websocket, done)
     await _close(websocket)

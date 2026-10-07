@@ -25,6 +25,7 @@ from app.ingestion.store import RecordStore, StoredRecordError
 from app.llm.chat import get_chat_provider
 from app.speech import registry as speech_registry
 from app.speech.base import SpeechError
+from app.speech.clarify import subjects_in, suggest_clarifications
 from app.speech.course_codes import normalize_course_mentions
 from app.speech.keyterms import spoken_course_codes
 from app.speech.registry import transcribe
@@ -92,11 +93,20 @@ class AdvisorHealth(BaseModel):
     suggested_questions: list[str]
 
 
+class Clarification(BaseModel):
+    spoken: str
+    candidates: list[str]
+    question: str
+
+
 class TranscribeResponse(BaseModel):
     text: str
     #: Deepgram's 0-1 confidence. The UI asks the student to check the text
     #: below 0.6; it never decides anything on its own.
     confidence: float
+    #: Bare course numbers heard ("four fifty nine") offered back as questions.
+    #: Omitted when there are none. Never applied to `text`.
+    clarifications: list[Clarification] | None = None
 
 
 def _store() -> RecordStore:
@@ -174,7 +184,7 @@ def reset_conversation(user: CurrentUser, conversation_id: str) -> dict[str, boo
     return {"cleared": conversations.clear(user.student_id, conversation_id)}
 
 
-@router.post("/transcribe", response_model=TranscribeResponse)
+@router.post("/transcribe", response_model=TranscribeResponse, response_model_exclude_none=True)
 def transcribe_question(
     user: CurrentUser, audio: Annotated[UploadFile, File()]
 ) -> TranscribeResponse:
@@ -215,4 +225,10 @@ def transcribe_question(
     # "computer science two forty three" -> "COSC 243", but only for real courses.
     catalog_codes = [course.code for program in programs for course in program.courses]
     text = normalize_course_mentions(result.text, catalog_codes)
-    return TranscribeResponse(text=text, confidence=result.confidence)
+    context = subjects_in(conversations.recent_text(user.student_id, "default"), catalog_codes)
+    questions = suggest_clarifications(text, catalog_codes, context)
+    return TranscribeResponse(
+        text=text,
+        confidence=result.confidence,
+        clarifications=[Clarification(**q.as_dict()) for q in questions] or None,
+    )

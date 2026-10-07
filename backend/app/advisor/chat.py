@@ -103,6 +103,11 @@ class ConversationStore:
         self._data: OrderedDict[tuple[str, str], Conversation] = OrderedDict()
         self._max = max_conversations
 
+    def recent_text(self, student_id: str, conversation_id: str) -> str:
+        """What was said lately, without creating a conversation to find out."""
+        found = self._data.get((student_id, conversation_id))
+        return " ".join(turn.content for turn in found.turns) if found else ""
+
     def get(self, student_id: str, conversation_id: str) -> Conversation:
         key = (student_id, conversation_id)
         if key not in self._data:

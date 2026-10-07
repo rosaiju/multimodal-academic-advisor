@@ -310,7 +310,7 @@ The same data is served read-only over HTTP:
 | 1 | React frontend: upload → review → dashboard | **Done** (PR #5) |
 | 1 | **Conversational advisor** | **Done** — see [docs/advisor.md](docs/advisor.md) |
 | 1 | **Live model phrasing, checked against the engine** | **Verified live with Ollama** (`qwen2.5:7b`, Oct 2026); hosted providers untested |
-| 2 | **Voice input (Deepgram, by SawcyD)** | **Built and integrated** - checked live with a human voice and real Deepgram in Chrome (Oct 6); Safari/Firefox untested |
+| 2 | **Voice input (Deepgram, by SawcyD)** | **Built and integrated** - live Deepgram checked Sep 22 with synthesized speech; integrated flow tested with a fake Deepgram, needs a human-voice check |
 | 3 | What-if simulation, multi-term planning | Not started |
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript

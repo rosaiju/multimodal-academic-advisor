@@ -203,10 +203,9 @@ for the question box and never asks the advisor anything itself.
 | Voice -> chat -> engine answer | `test_voice_to_advisor.py`, scripted fake | no |
 | Real browser: fake mic -> MediaRecorder -> relay -> UI box -> Ask -> answer, with live Ollama phrasing | Chromium's fake audio device, local fake Deepgram server (Oct 6) | no |
 | Blocked mic, unsupported browser | browser, with `getUserMedia` / `MediaRecorder` overridden | no |
-| **Human voice -> real Deepgram -> UI box -> Ask -> advisor** | Chrome on the dev laptop, Oct 6, two questions; backend log shows two `utterance_end` sessions, each followed by exactly one `/advisor/chat` (the silent session produced none). Both live `qwen2.5:7b` rephrasings were discarded by the consistency check and the engine's answers shown | **yes** |
 
-**Not yet verified:** Safari or Firefox; accents or a noisy room; the 0.6
-low-confidence note (both live questions transcribed cleanly).
+**Not yet verified:** a human voice through the browser to real Deepgram, and
+Safari or Firefox.
 
 ## Live verification
 

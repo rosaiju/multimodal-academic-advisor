@@ -190,11 +190,8 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   **Integration (Oct 6 2026, `feature/deepgram-voice-integration`):** merged with
   the live-LLM work; a spoken question gets the same engine answer as a typed one
   and is never auto-sent. Tested in Chromium with its fake audio device and a
-  local fake Deepgram. **Live check, same day:** a human voice in Chrome through
-  real Deepgram - "Can I take COSC 354?" and "What courses am I taking right
-  now?" landed in the box, were sent only on Ask, and got the engine's answers
-  (both live model rephrasings were caught and discarded). Safari/Firefox are
-  untested.
+  local fake Deepgram. **No Deepgram key was available for this round**, so the
+  integrated flow has not been run against real Deepgram or a human voice.
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in docs/demo-reference.md is answered correctly with no provider configured.

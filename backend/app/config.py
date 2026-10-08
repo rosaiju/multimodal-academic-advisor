@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     #: Seconds. A spoken question is a few seconds of audio; a request still
     #: running after this is a network problem, not a long transcription.
     deepgram_timeout_seconds: float = 20.0
+    #: How long a silence ends a live voice session. Long enough to think mid-question.
+    #: Deepgram's minimum is 1000.
+    speech_pause_ms: int = 5000
     #: About a minute of compressed speech. The client stops at 30 s; this is the
     #: server's own guard, not a policy about question length.
     max_audio_bytes: int = 2 * 1024 * 1024

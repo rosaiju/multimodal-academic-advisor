@@ -50,14 +50,31 @@ def test_what_if_answers_from_the_engine_and_changes_nothing(client, enrolled) -
     assert {p.name: p.read_bytes() for p in record_dir.glob("*.json")} == before
 
 
-def test_what_if_never_goes_to_the_model(client, enrolled, monkeypatch) -> None:
-    from app.advisor import chat as advisor_chat
+def _facts_for(client):
+    from app.advisor.facts import build_facts
+    from app.catalog.registry import registry
+    from app.ingestion.store import RecordStore
 
-    def boom():
-        raise AssertionError("the model must not be consulted for a what-if")
+    stored = RecordStore(get_settings().student_record_dir).load(client.student_id)
+    return build_facts(registry.get(PROGRAM), stored.to_student_record())
 
-    monkeypatch.setattr(advisor_chat, "get_chat_provider", boom)
-    assert ask(client, "What if I take COSC 281?", use_llm=True)["source"] == "engine"
+
+def test_what_if_can_be_phrased_by_a_model_but_only_faithfully(client, enrolled) -> None:
+    from app.advisor.answers import deterministic_answer
+    from app.advisor.chat import ask as advise
+    from tests.test_advisor import StubProvider
+
+    facts = _facts_for(client)
+    question = "What if I take COSC 281?"
+    prepared = deterministic_answer(facts, question).text
+
+    ok = advise(facts, question, student_id="a", provider=StubProvider(prepared))
+    assert ok.source == "engine+llm"
+
+    altered = prepared.replace("to 18.00", "to 19.00")
+    assert altered != prepared
+    bad = advise(facts, question, student_id="b", provider=StubProvider(altered))
+    assert bad.source == "engine" and bad.discarded == altered
 
 
 def test_what_if_reports_unknown_and_unmet(client, enrolled) -> None:

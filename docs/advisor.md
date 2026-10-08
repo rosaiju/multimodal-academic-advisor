@@ -231,6 +231,8 @@ the student presses Ask" and the privacy note (which names the configured vendor
 are unchanged. If the chosen provider has no key, `/advisor/health` reports
 `voice_available: false`, the mic button is hidden, and typing works as before.
 
+Live voice ends after `SPEECH_PAUSE_MS` of silence (default 5000, minimum 1000).
+
 The OpenAI provider is covered by tests against a loopback fake. **It has not been
 called against the real service.**
 
@@ -286,10 +288,9 @@ record is only read, never written (a test compares the files byte for byte).
 * The partial-catalog caveat is always in `warnings`.
 
 In chat, `Intent.WHAT_IF` extracts the course codes with the existing pattern
-(catalog subjects only) and calls `simulate()`. **No model reads or rephrases these
-answers**; the language model's role in this project stays rephrasing, and for a
-difference between two audits there is nothing for it to add except a chance to
-misstate one.
+(catalog subjects only) and calls `simulate()`. Like every other answer, the engine's
+text is what a configured model may rephrase, and `check_rephrasing` discards the
+model's version if it changes a figure or a course; the engine text is then shown.
 
 ## Course unlock explorer
 

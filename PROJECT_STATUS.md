@@ -212,7 +212,8 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
     "What-if & unlocks" tab. Checked in a real browser against a local backend with a
     throwaway account: the what-if (including an unknown course) and the unlock tree
     rendered with the engine's numbers. The what-if never writes the record (byte-for-
-    byte test) and its chat answers are never sent to a language model.
+    byte test). Its chat answers can be rephrased by a configured model and go
+    through the same consistency check as every other answer (stub-tested only).
   - *Voice clarification:* `CS` / "C O S C" variants normalize; bare numbers become
     "Did you mean ...?" chips, never auto-applied. **Backend-tested only**; not tried
     in a browser with a real voice.

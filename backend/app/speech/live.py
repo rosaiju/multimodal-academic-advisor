@@ -115,8 +115,8 @@ def live_url(settings: Settings, keyterms: Sequence[str]) -> str:
         # utterance_end_ms also requires them.
         ("interim_results", "true"),
         ("endpointing", "300"),
-        # 1.5 s without words ends the session - the "stop when I pause" choice.
-        ("utterance_end_ms", "1500"),
+        # This long without words ends the session (SPEECH_PAUSE_MS).
+        ("utterance_end_ms", str(max(settings.speech_pause_ms, 1000))),
     ]
     params += [("keyterm", term) for term in keyterms]
     return f"{base}/v1/listen?{urllib.parse.urlencode(params)}"

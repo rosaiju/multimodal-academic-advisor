@@ -23,9 +23,12 @@ from app.catalog.registry import registry
 from app.config import get_settings
 from app.ingestion.store import RecordStore, StoredRecordError
 from app.llm.chat import get_chat_provider
+from app.speech import registry as speech_registry
+from app.speech.base import SpeechError
+from app.speech.clarify import subjects_in, suggest_clarifications
 from app.speech.course_codes import normalize_course_mentions
-from app.speech.deepgram import SpeechError, transcribe
 from app.speech.keyterms import spoken_course_codes
+from app.speech.registry import transcribe
 
 router = APIRouter(prefix="/advisor", tags=["advisor"])
 
@@ -83,9 +86,17 @@ class AdvisorHealth(BaseModel):
     llm_available: bool
     reason: str
     degraded: bool
-    #: True when a Deepgram key is set. The UI hides the mic button otherwise.
+    #: True when the configured speech provider is usable. The UI hides the mic button otherwise.
     voice_available: bool
+    #: Which speech vendor handles voice (SPEECH_PROVIDER); shown in the privacy note.
+    speech_provider: str
     suggested_questions: list[str]
+
+
+class Clarification(BaseModel):
+    spoken: str
+    candidates: list[str]
+    question: str
 
 
 class TranscribeResponse(BaseModel):
@@ -93,6 +104,9 @@ class TranscribeResponse(BaseModel):
     #: Deepgram's 0-1 confidence. The UI asks the student to check the text
     #: below 0.6; it never decides anything on its own.
     confidence: float
+    #: Bare course numbers heard ("four fifty nine") offered back as questions.
+    #: Omitted when there are none. Never applied to `text`.
+    clarifications: list[Clarification] | None = None
 
 
 def _store() -> RecordStore:
@@ -111,7 +125,8 @@ def advisor_health() -> AdvisorHealth:
         llm_available=available,
         reason=reason,
         degraded=not available,
-        voice_available=bool(get_settings().deepgram_api_key),
+        voice_available=speech_registry.availability()[0],
+        speech_provider=speech_registry.provider_name(),
         suggested_questions=SUGGESTED_QUESTIONS,
     )
 
@@ -169,7 +184,7 @@ def reset_conversation(user: CurrentUser, conversation_id: str) -> dict[str, boo
     return {"cleared": conversations.clear(user.student_id, conversation_id)}
 
 
-@router.post("/transcribe", response_model=TranscribeResponse)
+@router.post("/transcribe", response_model=TranscribeResponse, response_model_exclude_none=True)
 def transcribe_question(
     user: CurrentUser, audio: Annotated[UploadFile, File()]
 ) -> TranscribeResponse:
@@ -184,7 +199,7 @@ def transcribe_question(
     would let anyone spend the team's Deepgram credit.
     """
     settings = get_settings()
-    if not settings.deepgram_api_key:
+    if not speech_registry.availability(settings)[0]:
         raise HTTPException(status_code=503, detail=VOICE_UNAVAILABLE)
 
     # Browsers send parameters ("audio/webm;codecs=opus"). Deepgram detects the
@@ -210,4 +225,10 @@ def transcribe_question(
     # "computer science two forty three" -> "COSC 243", but only for real courses.
     catalog_codes = [course.code for program in programs for course in program.courses]
     text = normalize_course_mentions(result.text, catalog_codes)
-    return TranscribeResponse(text=text, confidence=result.confidence)
+    context = subjects_in(conversations.recent_text(user.student_id, "default"), catalog_codes)
+    questions = suggest_clarifications(text, catalog_codes, context)
+    return TranscribeResponse(
+        text=text,
+        confidence=result.confidence,
+        clarifications=[Clarification(**q.as_dict()) for q in questions] or None,
+    )

@@ -311,15 +311,24 @@ The same data is served read-only over HTTP:
 | 1 | **Conversational advisor** | **Done** — see [docs/advisor.md](docs/advisor.md) |
 | 1 | **Live model phrasing, checked against the engine** | **Verified live with Ollama** (`qwen2.5:7b`, Oct 2026); hosted providers untested |
 | 2 | **Voice input (Deepgram, by SawcyD)** | **Built and integrated** - checked live with a human voice and real Deepgram in Chrome (Oct 6); Safari/Firefox untested |
-| 3 | What-if simulation, multi-term planning | Not started |
+| 3 | **Speech provider layer** (Deepgram default, OpenAI second) + benchmark tool | **Built**; OpenAI and the benchmark not run against real services |
+| 3 | **What-if simulator, course unlock explorer, spoken-course clarification** | **Built and tested**; checked in a browser (what-if, unlocks); clarification chips backend-tested only |
+| 3 | Multi-term planning, live voice advisor (TTS) | Not started |
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript
 or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps and
-recommendations → ask the advisor questions about it. 604 backend tests pass, and
-the whole path is verified in a real browser.
+recommendations → ask the advisor questions about it. 868 backend tests pass, and
+the upload-to-advisor path is verified in a real browser.
 
-**Voice input** needs `DEEPGRAM_API_KEY` in `backend/.env`; without it there is no
-mic button and typing works as before. Vision extraction of scanned documents is
+**Voice input** needs a key for the chosen provider in `backend/.env`
+(`SPEECH_PROVIDER=deepgram`, the default, with `DEEPGRAM_API_KEY`; or
+`SPEECH_PROVIDER=openai` with `OPENAI_API_KEY`); without one there is no mic button
+and typing works as before. Compare providers with `backend/scripts/speech_benchmark.py`
+(see [docs/advisor.md](docs/advisor.md#benchmarking-providers)).
+
+**Try the what-if and unlocks** (no key needed): sign in, confirm a transcript, open
+the *What-if & unlocks* tab, or ask the advisor "What if I take COSC 220 and COSC 281
+together?" / "What does COSC 241 unlock?". Nothing you try is saved. Vision extraction of scanned documents is
 implemented but needs an API key to run.
 
 **Verified live:** a local Ollama model (`qwen2.5:7b`) phrasing advisor answers,

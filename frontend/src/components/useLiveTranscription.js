@@ -12,7 +12,7 @@ const CHUNK_MS = 250
  * Live voice input: mic -> backend socket -> Deepgram, text back as it is heard.
  *
  * `liveText` is the whole transcript so far and is replaced on every update.
- * `onDone({ text, confidence })` runs at most once per session: when the
+ * `onDone({ text, confidence, clarifications })` runs at most once per session: when the
  * backend says `done`, or - if the connection fails after words were heard -
  * with those words, so nothing the student saw is lost.
  *
@@ -145,7 +145,14 @@ export function useLiveTranscription({ onDone }) {
         liveTextRef.current = message.text
         setLiveText(message.text)
       } else if (message.type === 'done') {
-        finish({ text: message.text, confidence: message.confidence }, null)
+        finish(
+          {
+            text: message.text,
+            confidence: message.confidence,
+            clarifications: message.clarifications ?? [],
+          },
+          null,
+        )
       } else if (message.type === 'error') finish(null, UNAVAILABLE)
     }
     // Closing without `done` - server restart, network drop, error.

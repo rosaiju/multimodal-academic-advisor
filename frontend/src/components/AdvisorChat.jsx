@@ -23,6 +23,8 @@ const CONVERSATION_ID = 'default'
 /** Below this Deepgram confidence the student is asked to check the text. */
 const LOW_CONFIDENCE = 0.6
 
+const SPEECH_VENDORS = { deepgram: 'Deepgram', openai: 'OpenAI' }
+
 const VOICE_MESSAGES = {
   empty: "Didn't catch that — try again.",
   lowConfidence: 'Check this — I may have misheard.',
@@ -43,8 +45,11 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const scroller = useRef(null)
   const input = useRef(null)
   const [voiceNote, setVoiceNote] = useState(null)
+  //: "Did you mean COSC 459?" offers for bare numbers heard. Never applied by
+  //: themselves: the student clicks one, or ignores them.
+  const [clarifications, setClarifications] = useState([])
 
-  const handleVoiceDone = useCallback(({ text, confidence }) => {
+  const handleVoiceDone = useCallback(({ text, confidence, clarifications: heard = [] }) => {
     const spoken = text.trim()
     if (!spoken) {
       setVoiceNote(VOICE_MESSAGES.empty)
@@ -52,6 +57,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
     }
     // The input is read-only while listening, so `current` is what was typed first.
     setDraft((current) => mergeDraft(current, spoken))
+    setClarifications(heard)
     setVoiceNote(confidence < LOW_CONFIDENCE ? VOICE_MESSAGES.lowConfidence : null)
     input.current?.focus()
   }, [])
@@ -60,8 +66,16 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const voiceOn = Boolean(health?.voice_available)
   const voiceBusy = voice.listening
 
+  /** Swap the heard words for the code the student chose. Their words, their choice. */
+  function applyClarification(offer, candidate) {
+    setDraft((current) => current.replace(offer.spoken, candidate))
+    setClarifications((current) => current.filter((c) => c !== offer))
+    input.current?.focus()
+  }
+
   function toggleListening() {
     setVoiceNote(null)
+    setClarifications([])
     if (voice.listening) {
       voice.stop()
     } else {
@@ -87,6 +101,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
     setError(null)
     setDraft('')
     setVoiceNote(null)
+    setClarifications([])
     setMessages((prev) => [...prev, { role: 'user', text: question }])
     setBusy(true)
     try {
@@ -258,9 +273,39 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
               'This browser cannot record audio. You can still type your question.'}
           </p>
         )}
+        {clarifications.length > 0 && !voice.listening && (
+          <div className="mt-2 space-y-1.5" role="group" aria-label="Did you mean a course?">
+            {clarifications.map((offer) => (
+              <div key={offer.spoken} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-slate-600">
+                  &ldquo;{offer.spoken}&rdquo; — {offer.question}
+                </span>
+                {offer.candidates.map((candidate) => (
+                  <button
+                    key={candidate}
+                    type="button"
+                    onClick={() => applyClarification(offer, candidate)}
+                    className="rounded-full border border-slate-300 px-2.5 py-1 font-medium text-slate-800 hover:bg-slate-50"
+                  >
+                    {candidate}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setClarifications((current) => current.filter((c) => c !== offer))
+                  }
+                  className="text-slate-400 underline hover:text-slate-600"
+                >
+                  no, leave it
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {voiceOn && (
           <p className="mt-2 text-xs text-slate-400">
-            Voice input sends your audio to Deepgram&apos;s speech service to turn it into
+            Voice input sends your audio to {SPEECH_VENDORS[health?.speech_provider] ?? 'a speech service'} to turn it into
             text. It is not saved, and nothing goes to the advisor until you press Ask.
           </p>
         )}

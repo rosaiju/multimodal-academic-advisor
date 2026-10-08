@@ -33,3 +33,7 @@ backend/student_records/
 # Account files hold email addresses and password hashes. Never commit them.
 backend/accounts/
 backend/uploads/
+
+# Personal speech-benchmark recordings and reports
+backend/benchmarks/recordings/
+backend/benchmarks/reports/

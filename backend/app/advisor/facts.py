@@ -78,6 +78,10 @@ class AdvisorFacts:
 
     audit: AuditResult | None = None
     plan: AdvisingPlan | None = None
+    #: What the what-if and unlock answers re-run the engine on. Read-only:
+    #: nothing here is ever written back to the stored record.
+    program: Program | None = None
+    record: StudentRecord | None = None
 
     @property
     def has_coursework(self) -> bool:
@@ -159,6 +163,8 @@ def build_facts(
         caveats=list(plan.caveats),
         audit=audit,
         plan=plan,
+        program=program,
+        record=record,
     )
 
 

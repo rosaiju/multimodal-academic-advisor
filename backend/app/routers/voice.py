@@ -1,4 +1,4 @@
-"""WS /advisor/listen - live voice input, relayed to Deepgram.
+"""WS /advisor/listen - live voice input, relayed to the configured speech provider.
 
 The browser never talks to Deepgram and never sees the key. It signs in with
 its first message (a token in a URL ends up in logs), streams audio, and gets
@@ -18,12 +18,15 @@ import logging
 
 from fastapi import APIRouter, WebSocket
 
+from app.advisor.chat import conversations
 from app.auth.dependencies import user_for_token, user_store
 from app.catalog.registry import registry
 from app.config import Settings, get_settings
-from app.speech.deepgram import SpeechError
+from app.speech import registry as speech_registry
+from app.speech.base import Final, LiveSpeechProvider, Partial, SpeechError, UtteranceEnd
+from app.speech.clarify import subjects_in, suggest_clarifications
 from app.speech.keyterms import spoken_course_codes
-from app.speech.live import DeepgramLive, Final, LiveTranscript, Partial, UtteranceEnd
+from app.speech.live import LiveTranscript
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +40,8 @@ MAX_SESSION_SECONDS = 30.0
 NO_SPEECH_SECONDS = 8.0
 #: After asking Deepgram to finish, how long to wait for its last phrases.
 FINISH_GRACE_SECONDS = 2.0
+#: A vendor that transcribes the whole recording needs a request's worth of time.
+BATCH_FINISH_SECONDS = 25.0
 _WATCHDOG_TICK_SECONDS = 0.05
 
 
@@ -61,46 +66,63 @@ async def _fail(websocket: WebSocket, reason: str) -> None:
     await _close(websocket)
 
 
-async def _signed_in(websocket: WebSocket, settings: Settings) -> bool:
-    """True if the first message is a `start` carrying a valid token, in time."""
+async def _signed_in(websocket: WebSocket, settings: Settings) -> tuple[str, str] | None:
+    """(student_id, conversation_id) if the first message is a `start` carrying a
+    valid token, in time; otherwise None. The conversation id only selects which
+    earlier turns are used as context for clarifying a spoken course number."""
     try:
         message = await asyncio.wait_for(websocket.receive(), START_TIMEOUT_SECONDS)
         frame = json.loads(message.get("text") or "")
         token = frame.get("token") if frame.get("type") == "start" else None
+        conversation = frame.get("conversation_id", "default")
     except (TimeoutError, ValueError, AttributeError):
-        return False
+        return None
     if not isinstance(token, str) or not token:
-        return False
-    return user_for_token(token, settings, user_store(settings)) is not None
+        return None
+    user = user_for_token(token, settings, user_store(settings))
+    if user is None:
+        return None
+    if not isinstance(conversation, str) or not 0 < len(conversation) <= 64:
+        conversation = "default"
+    return user.student_id, conversation
 
 
 @router.websocket("/listen")
 async def listen(websocket: WebSocket) -> None:
     await websocket.accept()
     settings = get_settings()
-    if not await _signed_in(websocket, settings):
+    identity = await _signed_in(websocket, settings)
+    if identity is None:
         await _fail(websocket, "unauthorized")
         return
-    if not settings.deepgram_api_key:
+    if not speech_registry.availability(settings)[0]:
         await _fail(websocket, "unavailable")
         return
 
     programs = registry.list_programs()
     catalog_codes = [course.code for program in programs for course in program.courses]
-    live = DeepgramLive()
+    try:
+        live = speech_registry.create_live_provider(settings)
+    except SpeechError:
+        await _fail(websocket, "unavailable")
+        return
     try:
         await live.connect(spoken_course_codes(programs), settings=settings)
     except SpeechError:
         await _fail(websocket, "unavailable")
         return
     try:
-        await _relay(websocket, live, catalog_codes, settings.max_audio_bytes)
+        await _relay(websocket, live, catalog_codes, settings.max_audio_bytes, identity)
     finally:
         await live.close()
 
 
 async def _relay(
-    websocket: WebSocket, live: DeepgramLive, catalog_codes: list[str], max_audio_bytes: int
+    websocket: WebSocket,
+    live: LiveSpeechProvider,
+    catalog_codes: list[str],
+    max_audio_bytes: int,
+    identity: tuple[str, str] = ("", "default"),
 ) -> None:
     transcript = LiveTranscript()
     if not await _send(websocket, {"type": "ready"}):
@@ -148,7 +170,11 @@ async def _relay(
             elapsed = loop.time() - started
             if elapsed >= MAX_SESSION_SECONDS:
                 return "time_limit"
-            if not transcript.heard_speech and elapsed >= NO_SPEECH_SECONDS:
+            if (
+                live.streams_partials
+                and not transcript.heard_speech
+                and elapsed >= NO_SPEECH_SECONDS
+            ):
                 return "no_speech"
 
     upstream = asyncio.create_task(from_browser())
@@ -167,15 +193,18 @@ async def _relay(
     # Let Deepgram flush the phrase it was still working on before answering.
     await live.finish()
     if not downstream.done():
-        await asyncio.wait({downstream}, timeout=FINISH_GRACE_SECONDS)
+        await asyncio.wait(
+            {downstream},
+            timeout=FINISH_GRACE_SECONDS if live.streams_partials else BATCH_FINISH_SECONDS,
+        )
         downstream.cancel()
     log.info("voice session ended: %s", reason)
-    await _send(
-        websocket,
-        {
-            "type": "done",
-            "text": transcript.text(catalog_codes),
-            "confidence": round(transcript.confidence, 3),
-        },
-    )
+    text = transcript.text(catalog_codes)
+    done = {"type": "done", "text": text, "confidence": round(transcript.confidence, 3)}
+    # A bare number ("four fifty nine") is offered back as a question, never applied.
+    context = subjects_in(conversations.recent_text(*identity), catalog_codes)
+    questions = suggest_clarifications(text, catalog_codes, context)
+    if questions:
+        done["clarifications"] = [q.as_dict() for q in questions]
+    await _send(websocket, done)
     await _close(websocket)

@@ -208,6 +208,123 @@ for the question box and never asks the advisor anything itself.
 **Not yet verified:** Safari or Firefox; accents or a noisy room; the 0.6
 low-confidence note (both live questions transcribed cleanly).
 
+## Speech providers
+
+Voice goes through one vendor-neutral contract, `LiveSpeechProvider` in
+`backend/app/speech/base.py`, and a registry (`speech/registry.py`) that picks the
+implementation from `SPEECH_PROVIDER` (default `deepgram`). The relay in
+`routers/voice.py`, the one-shot `POST /advisor/transcribe` route and
+`GET /advisor/health` all talk to the registry and nothing else, so adding a vendor
+is one class and one line in the registry.
+
+| `SPEECH_PROVIDER` | Class | Behaviour |
+|---|---|---|
+| `deepgram` (default) | `DeepgramLive` | True streaming: words appear while the student talks |
+| `openai` | `OpenAILive` | Buffers the recording, transcribes once on stop (`OPENAI_API_KEY`, `OPENAI_STT_MODEL`, default `gpt-4o-transcribe`). No live text, so the "no speech" timer is off for it |
+
+Rules every provider keeps: keys stay on the server and are never sent to the
+browser; a vendor's own error text is logged and never forwarded; and
+**course-code normalization is not a provider concern** - providers return what
+they heard and `app.speech.course_codes` rewrites it identically for all of them.
+Authentication, the audio-size cap, the time limit, "nothing leaves the box until
+the student presses Ask" and the privacy note (which names the configured vendor)
+are unchanged. If the chosen provider has no key, `/advisor/health` reports
+`voice_available: false`, the mic button is hidden, and typing works as before.
+
+Live voice ends after `SPEECH_PAUSE_MS` of silence (default 5000, minimum 1000).
+
+The OpenAI provider is covered by tests against a loopback fake. **It has not been
+called against the real service.**
+
+A Web Speech API fallback was considered and not built: it sends audio from the
+browser straight to the browser vendor, past the server's authentication, limits and
+privacy note, and cannot be benchmarked server-side.
+
+**Toward a live voice advisor** (mic -> streaming STT -> advisor -> TTS -> speaker):
+the events a provider yields (`Partial`, `Final`, `UtteranceEnd`) are the seam. Any
+streaming recognizer (Deepgram, Azure, Google, AWS, an OpenAI realtime session, or a
+LiveKit agent) can sit behind the same interface; the advisor side already takes
+plain text and returns grounded text, and the what-if and unlock answers are
+engine-only, so they can be spoken as they are. A TTS stage is the missing piece and
+is not built.
+
+### Benchmarking providers
+
+```bash
+cd backend
+python scripts/speech_benchmark.py --list                       # phrases to record
+python scripts/speech_benchmark.py --providers deepgram openai  # run + report
+```
+
+Record each phrase yourself (webm, ogg, m4a, mp3 or wav) as
+`backend/benchmarks/recordings/<phrase id>.<ext>`. Recordings and reports are
+git-ignored. The report (`benchmarks/reports/latest.md` and `.json`) lists, per
+provider and phrase: the exact transcript, the normalized transcript, whether the
+intended course code was recognized, latency, confidence when the provider gives one
+(OpenAI's is derived from token log-probabilities and may be absent), success or
+failure, and provider/model. A provider with no key is skipped and reported as
+skipped. **No benchmark has been run with real recordings yet**, so Deepgram stays the
+default on habit, not on evidence.
+
+## What-if simulation
+
+"What if I take COSC 220 and COSC 281 together?" - `POST /advisor/simulate`, or ask
+in the chat. `app/audit/simulation.py` builds a **new** `StudentRecord` (the model is
+frozen) holding the real coursework plus the hypothetical courses, runs the same
+`run_audit()` and `build_plan()` the dashboard uses on both versions, and reports the
+difference: credits, newly satisfied and advanced requirements, newly eligible
+courses, courses still blocked and what they still need, and warnings. The stored
+record is only read, never written (a test compares the files byte for byte).
+
+* `mode: "same_term"` (default, "take ... next semester / together") checks every
+  course against the **current** record, so a course whose prerequisite is in the same
+  batch is reported as not simulated. `mode: "completed"` ("if I complete / pass ...")
+  applies a course once its prerequisites are met by the record plus earlier ones.
+* A hypothetical course is assumed passed with at least a **C** (override with
+  `assumed_grade`). GPA is not projected, and the response says so.
+* Unknown courses, courses already completed and duplicates are listed under
+  `skipped`, never invented or double counted. An in-progress course is replaced, not
+  counted twice.
+* The partial-catalog caveat is always in `warnings`.
+
+In chat, `Intent.WHAT_IF` extracts the course codes with the existing pattern
+(catalog subjects only) and calls `simulate()`. Like every other answer, the engine's
+text is what a configured model may rephrase, and `check_rephrasing` discards the
+model's version if it changes a figure or a course; the engine text is then shown.
+
+## Course unlock explorer
+
+"What does COSC 241 unlock?", "What can I take after COSC 220?", "What do I need
+before COSC 241?" - `GET /advisor/unlocks/{code}` or the chat (`Intent.UNLOCKS`).
+`app/audit/impact.py` is built on `prereq_graph.unlocks / unmet_prerequisites /
+passed_courses`, the functions the planner uses, so it cannot disagree with a
+recommendation. It returns the course's prerequisite tree, the courses it directly
+unlocks and those further down the chain (with the path to each), and for every one
+whether **this** student can take it now, what they are missing, and what would
+still be missing once they finish the explored course. The frontend draws the tree
+as nested lists (the "What-if & unlocks" tab).
+
+## Spoken-course clarification
+
+Normalization (`speech/course_codes.py`) turns "computer science four fifty nine",
+"CS four fifty nine", "COSC four fifty nine", "C O S C four five nine" and
+"c. o. s. c. ..." into `COSC 459` - only when that course exists. A bare number
+("what do I need before four fifty nine") is handled by `speech/clarify.py`:
+
+* it is **never** applied. The transcript is unchanged and a `clarifications` list
+  rides along with the `done` message (and the one-shot transcribe response):
+  `{spoken, candidates, question}`, e.g. "Did you mean COSC 459?";
+* only catalog courses with that number are offered, and **every** match is named
+  when there are several. A number nothing in the catalog uses produces no
+  suggestion, and "120 credits" or "COSC 999" are not treated as bare numbers;
+* conversation context (subjects mentioned recently in the same conversation)
+  only **reorders** candidates; it never picks one;
+* the UI shows the question with one button per candidate and "no, leave it"; a click
+  replaces only the heard words.
+
+All of it is deterministic. The chips are covered by backend tests (unit and through
+the WebSocket); they have **not** been exercised in a browser with a real voice.
+
 ## Live verification
 
 **Verified live on 2026-10-06 against a real local model**: Ollama on the

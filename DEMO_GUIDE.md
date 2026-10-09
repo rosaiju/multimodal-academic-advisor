@@ -161,8 +161,8 @@ Open `backend/tests/test_no_llm_in_engine.py` on screen.
 
 Close on the numbers:
 
-> "667 tests pass. CI runs them on Python 3.11 and 3.14 and builds the frontend
-> on Node 22 and 24, on every pull request. Six pull requests merged; `main` runs
+> "784 tests pass. CI runs them on Python 3.11 and 3.14 and builds the frontend
+> on Node 22 and 24, on every pull request. Ten pull requests merged; `main` runs
 > the whole thing from a fresh clone."
 
 ---

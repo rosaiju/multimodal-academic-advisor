@@ -258,11 +258,27 @@ ruff check .
 black --check .
 
 cd ../frontend
+npm run lint
 npm run build
+npm test
 ```
 
 CI runs on **every** pull request regardless of its base branch, on Python 3.11 and
-3.14.
+3.14 and Node 22 and 24.
+
+### Frontend tests
+
+```bash
+cd frontend
+npm test
+```
+
+The tests use Vitest and React Testing Library, and they run in jsdom, so you don't
+need a browser. `src/api.js` is mocked in each test, so the backend doesn't need to be
+running either. They live next to the components they test (`*.test.jsx` in
+`src/components/`). The review screen has the most coverage, because nothing counts
+toward a degree until the student confirms it there. Use `npx vitest` to re-run the
+tests while you edit.
 
 ---
 

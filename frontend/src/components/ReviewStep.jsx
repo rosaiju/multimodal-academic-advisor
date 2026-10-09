@@ -10,6 +10,11 @@ import {
 } from './ui'
 import { confirmCourses } from '../api'
 
+/** A field as the student currently sees it: their edit if any, else what was read. */
+function currentValue(row, rowEdits, field) {
+  return rowEdits?.[field] ?? row[field] ?? ''
+}
+
 /**
  * Step 2 - review and confirm.
  *
@@ -40,7 +45,7 @@ export default function ReviewStep({ extraction, programId, onConfirmed, onBack 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  const valueOf = (index, field) => edits[index]?.[field] ?? rows[index][field] ?? ''
+  const valueOf = (index, field) => currentValue(rows[index], edits[index], field)
 
   /**
    * Why each row cannot be confirmed, or null. Recomputed as the student types,
@@ -53,7 +58,9 @@ export default function ReviewStep({ extraction, programId, onConfirmed, onBack 
   const blockers = useMemo(() => {
     return rows.map((row, i) => {
       if (row.is_placeholder) return row.blocking_reason
-      const missing = ['term', 'grade', 'credits'].filter((f) => valueOf(i, f) === '')
+      const missing = ['term', 'grade', 'credits'].filter(
+        (f) => currentValue(row, edits[i], f) === '',
+      )
       if (missing.length === 0) return null
       return `Missing ${missing.join(', ')}. Fill this in from your transcript, or untick the row.`
     })
@@ -74,7 +81,8 @@ export default function ReviewStep({ extraction, programId, onConfirmed, onBack 
     if (rows[index].is_placeholder) return
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(index) ? next.delete(index) : next.add(index)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
       return next
     })
   }

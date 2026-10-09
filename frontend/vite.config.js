@@ -17,4 +17,10 @@ export default defineConfig({
       },
     },
   },
+  // `npm test`. jsdom stands in for the browser; src/api.js is mocked in each
+  // test file, so no backend needs to be running.
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+  },
 })

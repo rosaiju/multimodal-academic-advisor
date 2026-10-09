@@ -135,7 +135,7 @@ sudo apt install python3-venv
 Verify:
 
 ```bash
-pytest -q          # 602 tests
+pytest -q          # 784 tests
 ```
 
 ### 3. Frontend
@@ -315,7 +315,7 @@ The same data is served read-only over HTTP:
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript
 or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps and
-recommendations → ask the advisor questions about it. 604 backend tests pass, and
+recommendations → ask the advisor questions about it. 784 backend tests pass, and
 the whole path is verified in a real browser.
 
 **Voice input** needs `DEEPGRAM_API_KEY` in `backend/.env`; without it there is no

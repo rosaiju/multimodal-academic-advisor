@@ -125,7 +125,7 @@ class TestSummary:
             + summary["unmet"]
             + summary["needs_advisor"]
         )
-        assert total == 6, "Morgan has six encoded blocks"
+        assert total == 9, "Morgan has nine encoded blocks"
 
     def test_no_degree_percentage_is_offered_on_a_partial_catalog(self, client) -> None:
         """The dashboard bug: 45% shown to a student holding 150 credits.

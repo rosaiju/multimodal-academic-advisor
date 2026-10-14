@@ -158,11 +158,19 @@ def build_plan(
 
     # Which unmet blocks each candidate course would advance.
     serves: dict[str, list[str]] = {}
+    #: Courses that some unfinished block requires outright, as opposed to listing
+    #: them as one option among several ("pick one of these five").
+    required_outright: set[str] = set()
     for block in unfinished:
+        outright = (
+            block.courses_required is not None and len(block.still_needed) <= block.courses_required
+        )
         for ref in block.still_needed:
             if ref.code in passed or ref.code in in_progress_codes:
                 continue
             serves.setdefault(ref.code, []).append(block.block_id)
+            if outright:
+                required_outright.add(ref.code)
 
     recommended: list[Recommendation] = []
     blocked: list[Recommendation] = []
@@ -217,9 +225,17 @@ def build_plan(
         (recommended if eligible else blocked).append(entry)
 
     def rank(entry: Recommendation) -> tuple:
-        # Longest chain first, then most unlocked, then most requirements served,
-        # then code for a stable order.
-        return (-entry.remaining_chain, -entry.unlocks_count, -len(entry.serves), entry.course.code)
+        # Longest chain first, then most unlocked, then courses a block requires
+        # outright ahead of mere options (otherwise a long "pick one" list wins
+        # every tie alphabetically and crowds required courses out), then most
+        # requirements served, then code for a stable order.
+        return (
+            -entry.remaining_chain,
+            -entry.unlocks_count,
+            entry.course.code not in required_outright,
+            -len(entry.serves),
+            entry.course.code,
+        )
 
     recommended.sort(key=rank)
     blocked.sort(key=rank)

@@ -112,6 +112,75 @@ Stated subtotals sum to 120; the listed courses sum to 119. Y2 S1 looks like it 
 missing a 3-credit course outright. Low priority — `[SEQ]` is advisory, not binding —
 but it is a sign the page is not maintained carefully, which bears on Q7/Q8/Q9.
 
+### Q12 — General education IM and MQ: the COSC 111 / MATH 241 substitutions
+
+Not encoded: `gen_ed_information_literacy` (IM, 3 cr) and `gen_ed_mathematics` (MQ, 3 cr).
+
+`[GENED]` lists, for IM, COSC 110, INSS 141 and "Computer literacy course required by
+the major/discipline", and for MQ, MATH 109, 110, 113 and "MQ course required by the
+major/discipline". For a CS major those last options are COSC 111 and MATH 241
+(`[PLANNER]`; see Q3). `[GENED]` also states a course may satisfy identical
+requirements in up to two areas — general education and the major — "The credits earned
+for the course count only once toward the total 120."
+
+**The audit engine cannot express that.** It applies a course to at most one block
+(`app/audit/engine.py`, rule 1), and COSC 111 and MATH 241 are already required by
+`major_required_courses` and `supporting_courses`. Tried with both matcher strategies:
+a student holding only COSC 111 gets the major block credit and IM stays UNMET; the
+same for MATH 241 and MQ. So listing them in the IM/MQ blocks does nothing, and leaving
+them out tells nearly every CS student a satisfied requirement is unmet — the normal
+path for this major is the substitution, not COSC 110 / MATH 109.
+
+Two ways forward, neither of which is a catalog edit:
+
+1. Engine support for a course counting toward two blocks (the two-area rule) — a change
+   to `app/audit/`, owned by the audit work, with the 120-credit total still counted once.
+2. A department answer that the substitution should be modelled differently.
+
+**Ask:** *does the two-area rule apply to COSC 111 -> IM and MATH 241 -> MQ for a CS major,
+and are those the intended substitutions?*
+
+### Q13 — General education AH: "two courses from different disciplines" and a foreign-language wildcard
+
+Not encoded: Arts and Humanities (AH, 6 cr).
+
+`[GENED]`: "Students must select two courses from different disciplines in the AH
+distribution area." Two things block it:
+
+- **"Different disciplines" is undefined.** Same course prefix is the obvious reading, but
+  the page never says so, and the engine has no distinct-discipline rule. An `n_of` of 2
+  would mark PHIL 102 + PHIL 220 satisfied, which the page's own wording rules out.
+- **The list contains a rule, not a course:** "Foreign Language 102 or higher 3 credits."
+  Without it, a student who took a language course is told AH is unmet.
+
+The other 18 options (ART 308 through WGST 301) are clear.
+
+**Ask:** *is "discipline" the course prefix, and which foreign-language courses count?*
+
+### Q14 — General education BP: lab pairing and the 7-credit total
+
+Not encoded: Biological and Physical Sciences (BP, 7 cr).
+
+`[GENED]`: "two courses from the BP distribution areas. At least one course must be
+lab-based." Lab-based options print lecture and lab as **separate rows** (CHEM 101, 3 cr
+and CHEM 101L, 1 cr; PHYS 203 and 203L; and so on) but BIOL 101 is a single 4-credit row.
+It is not stated whether a "course" is the lecture+lab pair, nor how two courses reach
+exactly 7 credits (4 + 3 works; two lab-based courses is 8). The engine has no "at least
+one from this subset" rule either.
+
+**Ask:** *does a lecture/lab pair count as one course, and is 4 + 3 the intended shape?*
+
+### Q15 — General education SB: "two courses from different disciplines"
+
+Not encoded: Social and Behavioral Sciences (SB, 6 cr).
+
+Same wording and same problem as Q13: `[GENED]` requires "two courses from different
+disciplines", and the list has several courses per prefix (HIST 101-130, 140; ECON 211,
+212; POSC 201, 206; PSYC 101, 111). An `n_of` of 2 would accept HIST 101 + HIST 102.
+The course list itself is clear (22 courses).
+
+**Ask:** *same as Q13 — is "discipline" the course prefix?*
+
 ---
 
 ## Resolved

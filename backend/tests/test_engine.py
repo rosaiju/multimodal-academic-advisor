@@ -79,8 +79,8 @@ class TestRefusesToOverreport:
     def test_coverage_reports_the_gap_honestly(self, morgan) -> None:
         result = run_audit(morgan, record())
         coverage = result.coverage
-        assert coverage.blocks_encoded == 6
-        assert coverage.courses_in_catalog == 56
+        assert coverage.blocks_encoded == 9
+        assert coverage.courses_in_catalog == 72
         assert coverage.courses_satisfying_no_block == 34
         assert "PARTIAL" in coverage.summary
         assert "absent, not failed" in coverage.summary

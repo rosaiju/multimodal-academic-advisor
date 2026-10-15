@@ -21,6 +21,8 @@ WAIT_FOREVER = "wait_forever"
 
 
 class ScriptedLive:
+    streams_partials = True
+
     """Stands in for DeepgramLive. `script` items are events, float sleeps, or markers."""
 
     def __init__(self, script=(), *, connect_error: SpeechError | None = None):
@@ -70,7 +72,7 @@ def voice_on(monkeypatch):
 
 
 def use(monkeypatch, fake: ScriptedLive) -> ScriptedLive:
-    monkeypatch.setattr(voice, "DeepgramLive", lambda: fake)
+    monkeypatch.setattr(voice.speech_registry, "create_live_provider", lambda settings=None: fake)
     return fake
 
 

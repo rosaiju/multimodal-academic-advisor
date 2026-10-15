@@ -1,8 +1,8 @@
 # Project status — COSC 490 Multimodal AI Academic Advisor
 
-Last updated: **2026-10-06**
-Branch: **`feature/deepgram-voice-integration`** (PR open, not merged) · `main` is
-`c165ddf` (PR #7 and PR #8, the live-LLM work, merged 2026-10-06)
+Last updated: **2026-10-07**
+Branch: **`feature/speech-providers-and-simulator`** (not pushed) · `main` is
+`7db2181` (PR #9, the Deepgram voice integration, merged)
 
 This file is the handover between working sessions. It records what is true right
 now, not what we intend — anything listed as working has been run.
@@ -195,6 +195,30 @@ Run end-to-end today with a real Morgan DegreeWorks PDF:
   now?" landed in the box, were sent only on Ask, and got the engine's answers
   (both live model rephrasings were caught and discarded). Safari/Firefox are
   untested.
+- **Speech providers, benchmark, what-if, unlock explorer, voice clarification
+  (Oct 7 2026, `feature/speech-providers-and-simulator`).** Seven commits, each with
+  tests; 868 backend tests pass, ruff and black clean, frontend lint (only the
+  pre-existing `ReviewStep.jsx` warnings) and build pass. Design and rules are in
+  [docs/advisor.md](docs/advisor.md#speech-providers).
+  - *Provider layer:* `LiveSpeechProvider` + registry, `SPEECH_PROVIDER` (default
+    `deepgram`). Deepgram's behaviour is unchanged; the one existing test edit swaps
+    the injection point (`create_live_provider`).
+  - *Second provider:* OpenAI speech-to-text (buffered, one result on stop).
+    **Tested against a loopback fake only - never called against OpenAI.**
+  - *Benchmark:* `backend/scripts/speech_benchmark.py`. **Not run with real
+    recordings**, so there is no evidence yet that anything beats Deepgram.
+  - *What-if + unlock explorer:* `app/audit/simulation.py`, `app/audit/impact.py`,
+    `POST /advisor/simulate`, `GET /advisor/unlocks/{code}`, two chat intents, and a
+    "What-if & unlocks" tab. Checked in a real browser against a local backend with a
+    throwaway account: the what-if (including an unknown course) and the unlock tree
+    rendered with the engine's numbers. The what-if never writes the record (byte-for-
+    byte test). Its chat answers can be rephrased by a configured model and go
+    through the same consistency check as every other answer (stub-tested only).
+  - *Voice clarification:* `CS` / "C O S C" variants normalize; bare numbers become
+    "Did you mean ...?" chips, never auto-applied. **Backend-tested only**; not tried
+    in a browser with a real voice.
+  - Not built: Web Speech fallback (bypasses the server's auth/limits), TTS and the
+    full live voice loop (only prepared for - see the advisor doc).
 - **`llm_configured: false`** — no key is set. Both student credit applications
   were last known to be pending. **This no longer blocks the demo**: every
   question in docs/demo-reference.md is answered correctly with no provider configured.

@@ -153,6 +153,20 @@ export function askAdvisor({ message, conversationId = 'default', useLlm = true 
   })
 }
 
+/**
+ * POST /advisor/simulate - audit a COPY of your record with hypothetical courses.
+ * Read-only on the server: the stored record is never written.
+ */
+export const simulateCourses = ({ courses, mode = 'same_term' }) =>
+  request('/advisor/simulate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courses, mode }),
+  })
+
+/** GET /advisor/unlocks/{code} - what a course needs, unlocks, and where you stand. */
+export const getUnlocks = (code) => request(`/advisor/unlocks/${encodeURIComponent(code)}`)
+
 /** DELETE /advisor/chat/{id} - forget one conversation. */
 export const resetConversation = (conversationId = 'default') =>
   request(`/advisor/chat/${encodeURIComponent(conversationId)}`, { method: 'DELETE' })

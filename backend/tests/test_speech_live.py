@@ -92,7 +92,7 @@ class TestLiveUrl:
         assert query["mip_opt_out"] == ["true"]
         assert query["interim_results"] == ["true"]
         assert query["endpointing"] == ["300"]
-        assert query["utterance_end_ms"] == ["1500"]
+        assert query["utterance_end_ms"] == ["5000"]
         assert query["keyterm"] == ["COSC", "COSC 241"]
 
     def test_key_is_never_in_the_url(self) -> None:

@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     max_tokens_per_session: int = 50_000
 
     # --- Voice input ---
+    #: Which speech-to-text vendor the relay uses (see app/speech/registry.py).
+    #: Deepgram stays the default.
+    speech_provider: str = "deepgram"
     #: Deepgram speech-to-text. Empty means voice input is off: the mic button is
     #: hidden and typing works exactly as before. Voice is an input channel only;
     #: it never changes how an answer is computed.
@@ -60,9 +63,18 @@ class Settings(BaseSettings):
     #: Seconds. A spoken question is a few seconds of audio; a request still
     #: running after this is a network problem, not a long transcription.
     deepgram_timeout_seconds: float = 20.0
+    #: How long a silence ends a live voice session. Long enough to think mid-question.
+    #: Deepgram's minimum is 1000.
+    speech_pause_ms: int = 5000
     #: About a minute of compressed speech. The client stops at 30 s; this is the
     #: server's own guard, not a policy about question length.
     max_audio_bytes: int = 2 * 1024 * 1024
+
+    #: OpenAI speech-to-text (SPEECH_PROVIDER=openai). Reuses OPENAI_API_KEY above.
+    #: Not streaming: audio is buffered and sent once when the student stops.
+    openai_stt_model: str = "gpt-4o-transcribe"
+    openai_base_url: str = "https://api.openai.com"
+    openai_stt_timeout_seconds: float = 30.0
 
     # --- Storage ---
     database_url: str = "sqlite:///./advisor.db"

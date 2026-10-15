@@ -20,7 +20,7 @@ from collections.abc import Iterable, Sequence
 SUBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "BIOL": ("biology",),
     "CLCO": ("cloud computing",),
-    "COSC": ("computer science",),
+    "COSC": ("computer science", "cs"),
     "ECON": ("economics", "econ"),
     "EEGR": ("electrical engineering",),
     "ENGL": ("english",),
@@ -89,6 +89,7 @@ def normalize_course_mentions(text: str, catalog_codes: Iterable[str]) -> str:
             phrases[alias] = subject
     if not phrases:
         return text
+    text = _join_spelled_subjects(text, phrases)
 
     alternation = "|".join(re.escape(p) for p in sorted(phrases, key=len, reverse=True))
     subject_pattern = re.compile(rf"\b({alternation})\b", re.IGNORECASE)
@@ -182,3 +183,33 @@ def _below_hundred(w: Sequence[str]) -> tuple[int, int]:
     if _DIGITS.get(w[0]):
         return _DIGITS[w[0]], 1
     return 0, 0
+
+
+#: Single letters separated by spaces, dots or hyphens: "C O S C", "c. o. s. c.".
+_SPELLED_RUN = re.compile(r"\b[A-Za-z]\b(?:[\s.\-]+\b[A-Za-z]\b)+\.?")
+
+
+def _join_spelled_subjects(text: str, phrases: dict[str, str]) -> str:
+    """ "C O S C four five nine" -> "COSC four five nine", for real subjects only.
+
+    Only a run of letters that spells a subject the catalog uses is joined, so
+    "I am a C student" is untouched.
+    """
+
+    def join(run: re.Match[str]) -> str:
+        letters = [m.group(0) for m in re.finditer(r"[A-Za-z]", run.group(0))]
+        out: list[str] = []
+        i = 0
+        while i < len(letters):
+            for size in range(min(5, len(letters) - i), 1, -1):
+                word = "".join(letters[i : i + size]).upper()
+                if word.lower() in phrases:
+                    out.append(word)
+                    i += size
+                    break
+            else:
+                out.append(letters[i])
+                i += 1
+        return " ".join(out)
+
+    return _SPELLED_RUN.sub(join, text)

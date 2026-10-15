@@ -135,7 +135,7 @@ sudo apt install python3-venv
 Verify:
 
 ```bash
-pytest -q          # 602 tests
+pytest -q          # 908 tests
 ```
 
 ### 3. Frontend
@@ -258,11 +258,27 @@ ruff check .
 black --check .
 
 cd ../frontend
+npm run lint
 npm run build
+npm test
 ```
 
 CI runs on **every** pull request regardless of its base branch, on Python 3.11 and
-3.14.
+3.14 and Node 22 and 24.
+
+### Frontend tests
+
+```bash
+cd frontend
+npm test
+```
+
+The tests use Vitest and React Testing Library, and they run in jsdom, so you don't
+need a browser. `src/api.js` is mocked in each test, so the backend doesn't need to be
+running either. They live next to the components they test (`*.test.jsx` in
+`src/components/`). The review screen has the most coverage, because nothing counts
+toward a degree until the student confirms it there. Use `npx vitest` to re-run the
+tests while you edit.
 
 ---
 
@@ -317,7 +333,7 @@ The same data is served read-only over HTTP:
 
 **What runs end to end today** on `main`: register → sign in → upload a transcript
 or DegreeWorks PDF → review and confirm rows → dashboard with credits, gaps and
-recommendations → ask the advisor questions about it. 868 backend tests pass, and
+recommendations → ask the advisor questions about it. 908 backend tests pass, and
 the upload-to-advisor path is verified in a real browser.
 
 **Voice input** needs a key for the chosen provider in `backend/.env`

@@ -19,12 +19,27 @@
 #     ENGL102  source "Composition II (EC)"       -> "Composition II"
 #     ENGL111  source "Composition I<dash>Honors EC"  -> "Composition I - Honors"
 #     ENGL112  source "Composition II<dash>Honors (EC)" -> "Composition II - Honors"
+#   The same rule applies to titles transcribed from [GENED] (general education
+#   courses). Affects exactly five rows; credits and codes are never altered:
+#     PHIL119  source "Critical Thinking<dash>Honors" -> "Critical Thinking - Honors"
+#     HIST350  source "Introduction to the African Diaspora (CI)"
+#                -> "Introduction to the African Diaspora"
+#     HIST360  source "Introduction to the African Diaspora, Honors (CI)"
+#                -> "Introduction to the African Diaspora, Honors"
+#     WGST201  source "Women<curly apostrophe>s and Gender Studies"
+#                -> "Women's and Gender Studies"
+#     (ENGL111/112 above are also printed on [GENED] with an em dash.)
 #
 # Course codes, titles and credits are transcribed from [PLANNER]. Prerequisites
 # come from [COURSE]. Where no source was consulted, the field is ABSENT and the
 # course carries a comment saying so - never a guess.
 #
 # STATUS: course layer sourced; disputed requirement blocks NOT encoded.
+#   General education: EC, CT, HH and CI are encoded from [GENED]. IM, MQ, AH, BP
+#   and SB are NOT - [GENED] is unambiguous about them, but the audit engine cannot
+#   yet express what they need (a course counting in two areas; "two courses from
+#   different disciplines"; "at least one lab"). See Q12-Q15 in
+#   docs/catalog-open-questions.md.
 #   [PLANNER] and [SEQ] are both official and they contradict each other on
 #   elective group membership and on how many courses each group needs. Those
 #   blocks stay out until the department resolves them.
@@ -373,6 +388,93 @@ courses:
     title: "Digital Electronics"
     credits: 3
     # no prerequisite source consulted for this course yet
+
+  # --- General education courses, transcribed from [GENED] ---------------------
+  # Code, title and credits come from the [GENED] course rows. No prerequisite
+  # source was consulted for any of them.
+
+  # CT - Critical Thinking
+  - code: ARCH105
+    title: "Place Matters: Introduction to Contemporary City"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: COMM300
+    title: "Communication and the Black Diaspora"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: ENGR110
+    title: "Engineering for Us All"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: MHTC340
+    title: "Spirituality and the Helping Tradition"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: PHIL109
+    title: "Critical Thinking"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: PHIL119
+    title: "Critical Thinking - Honors"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  # HH - Health and Healthful Living
+  - code: HLTH103
+    title: "Social and Behavioral Health Theory Applications"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: HLTH200
+    title: "Discovering Public Health"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: HLTH203
+    title: "Personal and Community Health"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: HLTH300
+    title: "Environmental Health Citizenship"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: NUSC160
+    title: "Introduction to Nutrition"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  # CI - Contemporary and Global Issues, Ideas and Values
+  - code: AFST350
+    title: "Africana Studies"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: HIST350
+    title: "Introduction to the African Diaspora"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: HIST360
+    title: "Introduction to the African Diaspora, Honors"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: MENA100
+    title: "Introduction to Middle East and North Africa Studies"
+    credits: 3
+    # no prerequisite source consulted for this course yet
+
+  - code: WGST201
+    title: "Women's and Gender Studies"
+    credits: 3
+    # no prerequisite source consulted for this course yet
 requirement_blocks:
   # Encoded ONLY where [PLANNER] and [SEQ] agree, or where [PLANNER] states a
   # requirement that no other official page contradicts.
@@ -419,6 +521,36 @@ requirement_blocks:
       as its prerequisite. each_of enforces one course from each part, which n_of
       could not - under n_of a student taking ENGL101 and ENGL111 satisfied the
       block without having done Part B at all.
+
+  - id: gen_ed_critical_thinking
+    name: General Education - Critical Thinking
+    type: n_of
+    n: 1
+    courses: [ARCH105, COMM300, ENGR110, MHTC340, PHIL109, PHIL119]
+    source: >-
+      [GENED] category "III. Critical Thinking - (CT) 3 Credits Required": "Students
+      must complete one of the options in the CT distribution area." Six options
+      printed, all 3 credits.
+
+  - id: gen_ed_health
+    name: General Education - Health and Healthful Living
+    type: n_of
+    n: 1
+    courses: [HLTH103, HLTH200, HLTH203, HLTH300, NUSC160]
+    source: >-
+      [GENED] category "VIII. Health and Healthful Living - (HH) 3 Credits
+      Required": "Students must complete one of the options in the HH distribution
+      area." Five options printed, all 3 credits.
+
+  - id: gen_ed_contemporary_issues
+    name: General Education - Contemporary and Global Issues, Ideas and Values
+    type: n_of
+    n: 1
+    courses: [AFST350, HIST350, HIST360, MENA100, WGST201]
+    source: >-
+      [GENED] category "IX. Contemporary and Global Issues, Ideas and Values - (CI)
+      3 Credits Required": "Students must complete one of the options in the CI
+      distribution area." Five options printed, all 3 credits.
 
   - id: first_year_seminar
     name: University First-Year Seminar

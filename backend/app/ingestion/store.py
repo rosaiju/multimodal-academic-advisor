@@ -119,7 +119,12 @@ class RecordStore:
     def load(self, student_id: str) -> StoredRecord:
         path = self.path_for(student_id)
         if not path.is_file():
-            raise StoredRecordError(f"no record for student {student_id!r} at {path}")
+            # The path is logged, never put in the message: routers return this
+            # text to the browser, and a server path is nobody's business there.
+            logger.info("no record file for %s at %s", student_id, path)
+            raise StoredRecordError(
+                f"no record for student {student_id!r}: no confirmed coursework yet"
+            )
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:

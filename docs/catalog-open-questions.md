@@ -21,6 +21,12 @@ Ask: **Dr. Shuangbao (Paul) Wang**, CS Department Chair, or a COSC academic advi
 All on `catalog.morgan.edu`. `preview_program.php`, `content.php` and
 `preview_entity.php` sit behind an AWS WAF JS challenge and are not reachable.
 
+**Re-verified 2026-11-04.** `[PLANNER]`, `[SEQ]` and `[GENED]` were re-fetched (raw
+HTML, one request at a time) and every open question below was checked against them
+again; each now carries a "Re-checked 2026-11-04" line. Course records were re-read
+for prerequisites. No page was blocked except two transient HTTP 202 WAF refusals
+during the course-record scan, which cleared after a 75 s pause.
+
 Until a question is answered, the affected requirement block stays out of the YAML.
 An absent block reports "not yet encoded." A guessed block reports a confident wrong
 number to a student deciding whether they graduate. The first is recoverable.
@@ -50,6 +56,13 @@ This is an inference, not a source statement. It is offered as the most likely
 reading, **not encoded as fact**. Worth asking directly: *is the 65 in the major
 heading a typo?*
 
+**Re-checked 2026-11-04, still open.** `[PLANNER]` verbatim: distribution table row
+"Required Courses for the Computer Science Major 59 credits"; section heading
+"Required Courses for Computer Science Major 65 credits". The section under that
+heading prints the twelve required courses (39 cr) plus **nine** elective rows
+(2 × Group A, 3 × Group B, **4** × Group C = 27 cr) = 66, or 62 without starred
+COSC 111. Neither 65 nor 59 falls out of the rows the heading itself prints.
+
 ### Q2 — Group C: three courses or four?
 
 Same page contradicts itself:
@@ -59,11 +72,23 @@ Same page contradicts itself:
 `[SEQ]` shows **four** Group C slots. Note that Q1's arithmetic only reaches 59 if the
 answer is **three**, so Q1 and Q2 are the same question asked twice.
 
+**Re-checked 2026-11-04, still open.** Tally of official statements: **four** —
+`[PLANNER]` Group C heading ("Students must choose four (4) courses."), `[PLANNER]`'s
+own required-courses list and its "General COSC Track" (four "COSC Group C Elective"
+rows each), and `[SEQ]` footnote 3 ("Choose four (4) courses from the following
+Group C electives"). **Three** — `[PLANNER]` footnote 3 and the 59-credit
+distribution figure. The majority says four; the distribution arithmetic says three.
+Not decidable from the sources.
+
 ### Q4 — Upper-division residency
 
 Department page: ALL junior/senior major courses must be taken at Morgan.
 University graduation page: TWO-THIRDS. Neither figure appears in `[PLANNER]` or
 `[SEQ]`, so no residency block is encoded at all.
+
+**Re-checked 2026-11-04, still open.** `[PLANNER]`, `[SEQ]` and `[GENED]` contain no
+residency statement. The department and graduation pages are `content.php` pages
+behind the WAF challenge, so they were not re-fetched.
 
 ### Q7 — Elective group membership differs between two official pages
 
@@ -77,6 +102,13 @@ University graduation page: TWO-THIRDS. Neither figure appears in `[PLANNER]` or
 `[PLANNER]` lists the quantum-track courses (210, 215, 310, 315, 410, 415, 386, 486)
 and EEGR 463, which `[SEQ]` omits. **Which list is binding?**
 
+**Re-checked 2026-11-04, still open; two details the table above did not capture:**
+
+- `[PLANNER]`'s Group C list prints **"COSC 470 - Artificial Intelligence ... OR ...
+  COSC 472 - Introduction to Machine Learning"** — an OR between two Group C options,
+  which suggests a student may count only one of them. `[SEQ]` lists both with no OR.
+- **COSC 241 and COSC 243 swap roles between the two pages** — see Q16.
+
 ### Q8 — Elective group counts differ
 
 | Group | `[PLANNER]` says | `[SEQ]` shows |
@@ -86,12 +118,25 @@ and EEGR 463, which `[SEQ]` omits. **Which list is binding?**
 | C | four (4) / three (3) — see Q2 | 4 slots |
 | D | — not mentioned — | 1 slot |
 
+**Re-checked 2026-11-04, still open.** `[SEQ]` footnotes verbatim: "Choose three (3)
+courses from the following Group A electives", "Choose two (2) courses from the
+following Group B electives", "Choose four (4) courses from the following Group C
+electives", "Choose one (1) course from the following Group D electives". `[PLANNER]`
+footnotes 1-3: two, three, three; its group headings: two, three, four. Both pages total
+nine or ten elective courses, but split them differently — see also Q17 (tracks).
+
 ### Q9 — Group D exists in one source only
 
 `[SEQ]` Fourth Year Semester Two includes a **Group D Elective**, with a footnote:
 *"MGBU 326, INSS 391, 494, EEGR 481, 483, or 300–400 level COSC course not previously taken."*
 
 `[PLANNER]` has no Group D anywhere.
+
+**Re-checked 2026-11-04, still open.** `[SEQ]` footnote 4 verbatim: "Choose one (1)
+course from the following Group D electives: MGBU 326, INSS 391, INSS 494,EEGR 481,
+EEGR 483, XXXX - 300-400 level COSC course not previously taken". Group D is real;
+whether it is *required* is the question, since the page that defines the degree
+(`[PLANNER]`) never mentions it.
 
 **This also corrects an earlier note in this repo.** CS Navigator's phantom Group D was
 cited as evidence that its API was stale. Group D is real — it appears in Morgan's own
@@ -112,7 +157,12 @@ Stated subtotals sum to 120; the listed courses sum to 119. Y2 S1 looks like it 
 missing a 3-credit course outright. Low priority — `[SEQ]` is advisory, not binding —
 but it is a sign the page is not maintained carefully, which bears on Q7/Q8/Q9.
 
-### Q12 — General education IM and MQ: the COSC 111 / MATH 241 substitutions
+**Re-checked 2026-11-04, unchanged.** Same subtotals; listed rows still sum to 119
+(Y3 S2's "COSC Group B Elective" row prints no credit value and is counted as 3).
+`[SEQ]` also omits COSC 201 (1 cr, required by `[PLANNER]` Supporting Courses) and
+the 6-credit Natural Science Complementary Studies entirely.
+
+### Q12 — General education IM and MQ: the COSC 111 / MATH 241 substitutions — catalog side SETTLED 2026-11-04; blocked only on the engine
 
 Not encoded: `gen_ed_information_literacy` (IM, 3 cr) and `gen_ed_mathematics` (MQ, 3 cr).
 
@@ -140,6 +190,24 @@ Two ways forward, neither of which is a catalog edit:
 **Ask:** *does the two-area rule apply to COSC 111 -> IM and MATH 241 -> MQ for a CS major,
 and are those the intended substitutions?*
 
+**Re-checked 2026-11-04 — the sources answer the catalog half of this.** `[PLANNER]`
+tags the two rows explicitly: **"COSC 111 - Introduction to Computer Science I IM \*"**
+and **"MATH 241 - Calculus I MQ \*"**, with the note "\* denotes a department required
+supporting/major course which may fulfill a general education requirement and must be
+completed with a grade of 'C' or higher". `[SEQ]` First Year Semester One carries the
+same IM \* and MQ \* tags. `[GENED]` prints, verbatim: "Subject to specific requirements
+for the various majors, minors and certificates, students may use a course(s) to satisfy
+identical course requirements in up to two of the following areas: 1) general education
+requirements; 2) requirements for the major; ... The credits earned for the course count
+only once toward the total 120 credits". So: yes, COSC 111 -> IM and MATH 241 -> MQ are
+the intended substitutions, and the two-area rule is what makes them legal. Also
+verified: MQ's printed rule is "Must be MATH 109 or Above"; IM's options are COSC 110
+(3), INSS 141 (3); MQ's are MATH 109 (4), MATH 110 (3), MATH 113 (4).
+
+**Nothing left to ask the department here.** The blocks stay out only because the
+engine cannot yet let one course satisfy two blocks; see "Engine capabilities needed"
+at the end of this file. Note the `*` also means the substitution needs a **C**.
+
 ### Q13 — General education AH: "two courses from different disciplines" and a foreign-language wildcard
 
 Not encoded: Arts and Humanities (AH, 6 cr).
@@ -157,6 +225,11 @@ The other 18 options (ART 308 through WGST 301) are clear.
 
 **Ask:** *is "discipline" the course prefix, and which foreign-language courses count?*
 
+**Re-checked 2026-11-04, still open.** `[GENED]` wording unchanged; 18 course rows plus
+the "Foreign Language 102 or higher 3 credits." row. `[PLANNER]` confirms the shape:
+two rows "XXXX - AH General Education Req. 3 credits AH". See "Partial encoding tried
+and rejected" below.
+
 ### Q14 — General education BP: lab pairing and the 7-credit total
 
 Not encoded: Biological and Physical Sciences (BP, 7 cr).
@@ -170,6 +243,17 @@ one from this subset" rule either.
 
 **Ask:** *does a lecture/lab pair count as one course, and is 4 + 3 the intended shape?*
 
+**Re-checked 2026-11-04 — the 4 + 3 shape is SETTLED, the rest is still open.**
+`[PLANNER]` prints the BP slots as **"XXXX - BP General Education Req. 4 credits with
+lab BP"** and **"XXXX - BP General Education Req. 3 credits no lab req. BP"**; `[SEQ]`
+prints "BP General Education Req. 4 credits (BP)" (Y3 S1) and "BP General Education
+Req. 3 credits no lab req. BP" (Y3 S2). So the intended shape is one 4-credit lab-based
+course plus one 3-credit course. That implies a 3-credit lecture + 1-credit lab pair
+(e.g. CHEM 101 + CHEM 101L) is "a course" for this purpose, but no page says so in
+words, and PHYS 205/206 (4 cr) + 205L/206L (1 cr) make 5, which fits neither slot.
+Still open: *does PHYS 205 + 205L count as the lab course, and is the excess credit
+simply absorbed?* The engine also still lacks an "at least one from this subset" rule.
+
 ### Q15 — General education SB: "two courses from different disciplines"
 
 Not encoded: Social and Behavioral Sciences (SB, 6 cr).
@@ -180,6 +264,143 @@ disciplines", and the list has several courses per prefix (HIST 101-130, 140; EC
 The course list itself is clear (22 courses).
 
 **Ask:** *same as Q13 — is "discipline" the course prefix?*
+
+**Re-checked 2026-11-04, still open.** `[GENED]` wording and the 22-course list are
+unchanged (the heading is printed without its roman numeral VII). `[PLANNER]` shows two
+rows "XXXX - SB General Education Req. 3 credits SB".
+
+#### Partial encoding of AH / BP / SB — tried 2026-11-04 and rejected
+
+The course lists and counts are verified, so a partial encoding was built: AH and SB as
+`n_of` 2, BP as `credits_from` 7, all with `advisor_approval_required: true` so the
+engine never says SATISFIED for a rule it cannot check. It was backed out before commit
+because, with today's engine:
+
+1. `advisor_approval_required` forces NEEDS_ADVISOR **even when nothing has been
+   taken**, so an empty record shows three categories as "needs advisor" instead of
+   unmet (`tests/test_engine.py::test_empty_record_produces_a_clean_unmet_audit`).
+2. It adds 80 courses and ~18 subjects; the speech keyterm list grows to 192 terms,
+   over the 150 budget `tests/test_transcribe_api.py` enforces for Deepgram.
+3. Three non-lab BP courses (9 cr) would reach 7 credits with no lab at all.
+
+It becomes encodable without any guess once the engine has the capabilities listed at
+the end of this file. The verified course lists are in `[GENED]`, transcribed exactly
+as in the existing CT/HH/CI blocks.
+
+### Q16 — COSC 241 and COSC 243: which one is required? (new 2026-11-04)
+
+The two official pages swap them:
+
+| | `[PLANNER]` | `[SEQ]` |
+|---|---|---|
+| COSC 243 Computer Organization and Architecture | **Required** (under "Required Courses for Computer Science Major") **and** a Group A option | Group A option only (footnote 1); no fixed row |
+| COSC 241 Computer Systems and Digital Logic | Group A option only | **Fixed row**, Second Year Semester One |
+
+Two more facts bear on it. `[COURSE]` coid=62105, COSC 354 Operating Systems (required
+by both pages): "Prerequisite(s) COSC 220 and COSC 241 completed with grades of 'C' or
+higher" — so every CS major must take COSC 241 in practice. And COSC 243 listed as both
+required and a Group A option on the same page means it would count twice unless one of
+those listings is an error.
+
+**Encoded meanwhile:** COSC 243 stays in `major_required_courses`, because `[PLANNER]` —
+the degree-requirements page — prints it under that heading. The block's `source` no
+longer claims `[SEQ]` agrees (it said "All twelve also appear in [SEQ]", which was true
+only in the sense that COSC 243 appears in a Group A footnote). COSC 241 is not added as
+required: no requirements page says it is; it is reached through COSC 354's prerequisite.
+
+**Ask:** *for the 2026-2028 catalog, is COSC 243 or COSC 241 the required course, and can
+the other count as a Group A elective?*
+
+### Q17 — `[PLANNER]` prints three tracks; nothing says how a student is assigned one (new 2026-11-04)
+
+Under the required-courses list, `[PLANNER]` prints three alternative elective layouts:
+
+- **General COSC Track** — 2 × Group A, 3 × Group B, 4 × Group C.
+- **Quantum Science and Engineering Track** — COSC 210, 215, 310, 315, 410, 415 named,
+  plus one Group B and one Group C elective.
+- **Cybersecurity AI Track** — COSC 251, 323, 358, 470, 472, 474 named, plus one Group A
+  and one Group B elective.
+
+`[SEQ]` and `[GENED]` mention no tracks, and nothing on a transcript or DegreeWorks audit
+in this repo identifies a student's track. Each track is a different elective block, so
+Q7/Q8 cannot be encoded until this is answered too.
+
+**Ask:** *are the tracks official options, how is a student's track recorded, and is the
+General COSC Track the default?*
+
+### Q18 — Natural Science Complementary Studies: "20-499" and the SCMNS course list (new 2026-11-04)
+
+`[PLANNER]`: "Students must complete six credits in the Complementary Studies Program
+which are required of all majors in the School of Computer, Mathematical and Natural
+Sciences (SCMNS). Options for satisfying this requirement are outlined under the section
+on the SCMNS." Note: "Complementary Studies are two courses chosen from any 20-499 course
+in the SCMNS".
+
+Not encodable from reachable pages: "20-499" is almost certainly 200-499 but is printed
+as 20; the SCMNS section that lists the options is a `content.php` page behind the WAF;
+and which subject prefixes belong to SCMNS is not stated on any reachable page. A
+`credits_from` block with a subject filter is the obvious shape once those are known.
+`[SEQ]` omits the requirement entirely.
+
+**Ask:** *is it 200-499, and which departments' courses count (e.g. is COSC itself
+excluded)?*
+
+### Q19 — The 1-credit physical activity / FIN 101 requirement (new 2026-11-04)
+
+`[PLANNER]`: "XXXX - Phys. Activity or FIN 101 or MIND 101 or DSVG 101 or FACS 102
+1 credit". `[SEQ]` First Year Semester Two: "XXXX - Phys. ED. Activity or FIN 101
+1 credit". This is the +1 in Q3's 44-credit reconciliation, so the requirement is real.
+Not encoded: "Phys. Activity" names no course, `[SEQ]` lists only FIN 101 beside it, and
+no `[COURSE]` record for FIN 101, MIND 101, DSVG 101 or FACS 102 was read, so titles
+and credits would be guesses.
+
+**Ask:** *which courses count as "Phys. Activity", and are MIND 101, DSVG 101 and FACS 102
+valid for CS majors (they are on `[PLANNER]` but not `[SEQ]`)?*
+
+### Q20 — Senior Departmental Comprehensive Examination (new 2026-11-04)
+
+`[PLANNER]`, School-wide Requirements: "To qualify for graduation, students must have
+satisfied ... Passed the Senior Departmental Comprehensive Examination". Unambiguous,
+but it is not a course, and no block type can express a non-course milestone, so it is
+not encoded. Nothing to ask the department; it needs an engine capability (below).
+
+### Q21 — What does an "I" / "INC" (incomplete) grade mean? (new 2026-11-04)
+
+`app/catalog/schema.py` treats **"I"** as NON_PASSING (like F) but **"INC"** as
+IN_PROGRESS_GRADES (registered, not finished). Both are left as they are: no page read
+for this catalog (`[PLANNER]`, `[SEQ]`, `[GENED]`, any `[COURSE]` record) defines the
+incomplete grade, and Morgan's grading-policy section is a `content.php` page behind
+the WAF challenge, so it could not be checked. Picking one meaning would be a guess.
+
+**Ask (registrar):** *is an Incomplete recorded as "I" or "INC", does it count as attempted
+credit, and does it convert to F after a deadline?*
+
+## Engine capabilities needed (for the audit owner, `app/audit/`)
+
+Verified rules the catalog cannot express today. Proposed shapes only — nothing below
+exists in `app/catalog/schema.py`.
+
+1. **One course in two blocks (Q12, IM/MQ).** Rule: `[GENED]` "students may use a
+   course(s) to satisfy identical course requirements in up to two of the following
+   areas ... The credits earned for the course count only once". Proposed: a block flag
+   `shares_courses_with: [major_required_courses]` (or `may_double_count: true`) that
+   lets the block see courses already applied to the named block, without adding their
+   credits to `total_credits_applied` a second time. Then:
+   `gen_ed_information_literacy: n_of 1 [COSC110, INSS141, COSC111], min_grade C for COSC111`.
+2. **Distinct disciplines (Q13, Q15, AH/SB).** Rule: "two courses from different
+   disciplines". Proposed: `n_of` field `distinct_subjects: true` — at most one applied
+   course per subject prefix. Only usable after the department confirms that discipline
+   means prefix.
+3. **At least one from a subset (Q14, BP).** Rule: "At least one course must be
+   lab-based." Proposed: `credits_from` field `min_from: {courses: [...lab-based...], n: 1}`
+   plus a way to treat a lecture+lab pair (CHEM 101 + CHEM 101L) as one unit, e.g.
+   `units: [[CHEM101, CHEM101L], [BIOL101], ...]`.
+4. **NEEDS_ADVISOR only when there is something to review.** Today
+   `advisor_approval_required` forces NEEDS_ADVISOR even with nothing applied. If it
+   applied only when the block would otherwise be SATISFIED or IN_PROGRESS (UNMET stays
+   UNMET), AH/BP/SB could ship now as advisor-confirmed partial blocks.
+5. **Milestone block (Q20).** Proposed: `type: milestone` with an id the student record
+   can carry as passed/not passed; NEEDS_ADVISOR when the record is silent.
 
 ---
 

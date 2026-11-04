@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   EmptyState,
+  EngineBadge,
   ProgressRing,
   ProvenanceBadge,
   Spinner,
@@ -100,7 +101,10 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
           />
 
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">Credit progress</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">Credit progress</h2>
+              <EngineBadge />
+            </div>
             <p className="text-sm text-slate-500">
               {summary.program_id} · catalog {summary.catalog_year}
             </p>

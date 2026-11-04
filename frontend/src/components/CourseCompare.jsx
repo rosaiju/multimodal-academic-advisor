@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Card, Spinner } from './ui'
+import { Alert, Card, EngineBadge, Spinner } from './ui'
 import { compareCourses, getCatalogCourses } from '../api'
 
 /**
@@ -20,16 +20,21 @@ const STATE = {
 }
 
 export default function CourseCompare({ studentId, programId }) {
-  const [courses, setCourses] = useState([])
+  const [courses, setCourses] = useState(null)
   const [picked, setPicked] = useState([])
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [catalogError, setCatalogError] = useState(null)
 
   useEffect(() => {
     if (!programId) return
+    let cancelled = false
     getCatalogCourses(programId)
-      .then(setCourses)
-      .catch((e) => setError(e.message))
+      .then((list) => !cancelled && setCourses(list))
+      .catch((e) => !cancelled && setCatalogError(e.message))
+    return () => {
+      cancelled = true
+    }
   }, [programId])
 
   useEffect(() => {
@@ -52,14 +57,23 @@ export default function CourseCompare({ studentId, programId }) {
     result && picked.length >= 2 && result.courses.map((c) => c.code).join() === picked.join()
       ? result
       : null
-  const available = courses.filter((c) => !picked.includes(c.code))
+  const available = (courses ?? []).filter((c) => !picked.includes(c.code))
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <Card
         title="Compare courses"
         subtitle="Pick two to four courses to see how they differ for you."
+        action={<EngineBadge />}
       >
+        {catalogError && (
+          <div className="mb-3">
+            <Alert tone="error" title="Couldn't load the course list">
+              <p>{catalogError}</p>
+            </Alert>
+          </div>
+        )}
+        {!courses && !catalogError && <Spinner label="Loading the catalog…" />}
         <div className="flex flex-wrap items-center gap-2">
           {picked.map((code) => (
             <span
@@ -77,13 +91,13 @@ export default function CourseCompare({ studentId, programId }) {
               </button>
             </span>
           ))}
-          {picked.length < MAX && (
-            <label className="text-sm">
+          {courses && picked.length < MAX && (
+            <label className="block w-full text-sm sm:w-auto">
               <span className="sr-only">Add a course</span>
               <select
                 value=""
                 onChange={(e) => e.target.value && setPicked([...picked, e.target.value])}
-                className="rounded-md border border-slate-300 bg-white px-2 py-1"
+                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 sm:w-auto sm:max-w-md"
               >
                 <option value="">Add a course…</option>
                 {available.map((c) => (
@@ -95,7 +109,7 @@ export default function CourseCompare({ studentId, programId }) {
             </label>
           )}
         </div>
-        {picked.length < 2 && (
+        {courses && picked.length < 2 && (
           <p className="mt-3 text-sm text-slate-500">Choose at least two courses to compare.</p>
         )}
       </Card>

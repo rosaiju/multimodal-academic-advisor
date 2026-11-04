@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Card, Spinner } from './ui'
+import { Alert, Button, Card, EngineBadge, Spinner } from './ui'
 import { generateSchedule, validateSchedule } from '../api'
 
 /**
@@ -13,6 +13,15 @@ import { generateSchedule, validateSchedule } from '../api'
  */
 
 const CREDIT_CHOICES = [9, 12, 15, 18]
+
+/**
+ * Shown when the backend sends no caveats of its own. The catalog encodes only
+ * part of the degree, so a plan without this line would read as a complete
+ * route to graduation - which it is not.
+ */
+export const FALLBACK_CAVEAT =
+  'This plan covers only the requirements currently encoded in the catalog, which is partial. ' +
+  'The last planned term is not a graduation date. Check DegreeWorks and your advisor before registering.'
 
 const termCredits = (term) => term.courses.reduce((sum, c) => sum + Number(c.credits), 0)
 
@@ -28,6 +37,7 @@ export default function SemesterPlanner({ studentId }) {
   const [issues, setIssues] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [checkError, setCheckError] = useState(null)
   const [dragging, setDragging] = useState(null)
   const checkSeq = useRef(0)
 
@@ -37,9 +47,12 @@ export default function SemesterPlanner({ studentId }) {
       try {
         const result = await validateSchedule(studentId, toLayout(next), target)
         // A slower, older answer must not overwrite the answer to the latest edit.
-        if (seq === checkSeq.current) setIssues(result.issues)
+        if (seq === checkSeq.current) {
+          setIssues(result.issues)
+          setCheckError(null)
+        }
       } catch (err) {
-        if (seq === checkSeq.current) setError(err.message)
+        if (seq === checkSeq.current) setCheckError(err.message)
       }
     },
     [studentId],
@@ -48,6 +61,7 @@ export default function SemesterPlanner({ studentId }) {
   async function generate() {
     setLoading(true)
     setError(null)
+    setCheckError(null)
     try {
       const result = await generateSchedule(studentId, {
         credit_target: creditTarget,
@@ -114,14 +128,9 @@ export default function SemesterPlanner({ studentId }) {
         title="Semester plan"
         subtitle="Your remaining required courses, laid out by term. Drag a course, or use its move menu."
         action={
-          <button
-            type="button"
-            onClick={generate}
-            disabled={loading}
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-          >
+          <Button onClick={generate} disabled={loading}>
             {loading ? 'Planning…' : 'Re-generate'}
-          </button>
+          </Button>
         }
       >
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
@@ -149,11 +158,28 @@ export default function SemesterPlanner({ studentId }) {
           </label>
           <span className="text-xs text-slate-400">Applies when you re-generate.</span>
         </div>
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <EngineBadge />
+          Prerequisites and every check on your edits come from the catalog, not a language
+          model.
+        </p>
       </Card>
 
       {error && (
         <Alert tone="error" title="Couldn't build the plan">
           <p>{error}</p>
+          <Button variant="secondary" className="mt-3" onClick={generate} disabled={loading}>
+            Try again
+          </Button>
+        </Alert>
+      )}
+
+      {checkError && (
+        <Alert tone="warning" title="Couldn't check that change">
+          <p>
+            {checkError} Your layout is kept, but it has not been checked against the
+            prerequisites.
+          </p>
         </Alert>
       )}
 
@@ -165,24 +191,29 @@ export default function SemesterPlanner({ studentId }) {
 
       {plan && (
         <>
-          {plan.caveats.length > 0 && (
-            <Alert tone="warning" title="Read this before relying on the plan">
-              <ul className="list-disc space-y-1 pl-5">
-                {plan.caveats.map((c) => (
-                  <li key={c}>{c}</li>
-                ))}
-              </ul>
-            </Alert>
-          )}
+          <Alert tone="warning" title="Read this before relying on the plan">
+            <ul className="list-disc space-y-1 pl-5">
+              {(plan.caveats?.length ? plan.caveats : [FALLBACK_CAVEAT]).map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          </Alert>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat label="Terms planned" value={terms.filter((t) => t.courses.length).length} />
             <Stat label="Courses planned" value={terms.reduce((n, t) => n + t.courses.length, 0)} />
-            <Stat label="Last planned term" value={plan.last_planned_term ?? 'None'} />
+            <Stat
+              label="Last planned term"
+              value={plan.last_planned_term ?? 'None'}
+              note="Not a graduation date"
+            />
           </div>
 
           {errorCount > 0 && (
-            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div
+              role="alert"
+              className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+            >
               {errorCount} problem{errorCount === 1 ? '' : 's'} with this layout. Fix the courses marked in red.
             </div>
           )}
@@ -317,11 +348,12 @@ export default function SemesterPlanner({ studentId }) {
   )
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, note }) {
   return (
     <div className="rounded-lg bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
       <div className="text-xs text-slate-500">{label}</div>
       <div className="text-lg font-semibold text-slate-900">{value}</div>
+      {note && <div className="text-xs text-slate-400">{note}</div>}
     </div>
   )
 }

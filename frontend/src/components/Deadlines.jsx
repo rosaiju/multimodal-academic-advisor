@@ -36,6 +36,7 @@ function countdown(d) {
 export default function Deadlines({ studentId }) {
   const [report, setReport] = useState(null)
   const [error, setError] = useState(null)
+  const [saveError, setSaveError] = useState(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -50,11 +51,11 @@ export default function Deadlines({ studentId }) {
 
   async function save() {
     setSaving(true)
-    setError(null)
+    setSaveError(null)
     try {
       await downloadDeadlinesCalendar(studentId)
     } catch (e) {
-      setError(e.message)
+      setSaveError(e.message)
     } finally {
       setSaving(false)
     }
@@ -71,8 +72,13 @@ export default function Deadlines({ studentId }) {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       {error && (
-        <Alert tone="error" title="Something went wrong">
+        <Alert tone="error" title="Couldn't load your dates">
           <p>{error}</p>
+        </Alert>
+      )}
+      {saveError && (
+        <Alert tone="error" title="Couldn't build the calendar file">
+          <p>{saveError}</p>
         </Alert>
       )}
 
@@ -94,6 +100,11 @@ export default function Deadlines({ studentId }) {
             <p className="text-sm text-slate-500">
               The calendar file gives each date a reminder the day before, so your own calendar
               app does the reminding.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Dates are read from Morgan&apos;s published academic calendar, each linked to its
+              source. Commencement dates are the ceremony, not a promise of when you will
+              graduate.
             </p>
           </Card>
 

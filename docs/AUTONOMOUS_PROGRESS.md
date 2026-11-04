@@ -59,3 +59,17 @@ recommendations about degree progress, course suggestions, and even emotion issu
 | Emotional / mentoring support | — | **Missing** |
 | Gemini | `app/llm` gemini provider | **Blocked**: no `GEMINI_API_KEY` |
 | Misleading credits answer (">120 credits, still need 0") | `answers.answer_credits` | **Defect** |
+
+## Step 3 — integration so far
+
+| Merged | Commit | Checks after merge |
+|---|---|---|
+| agent/frontend (5 commits) | `6965a85` | 26 frontend tests, lint, build |
+| agent/engine (3 commits) | `174cd40` | 1140 backend tests; black fix to the new walkthrough script in `70b3611` |
+| agent/catalog (1 commit) | `6058c14` | 2 engine tests failed: they assumed MATH141 was an unverified stub, which the catalog agent sourced as Precalculus (4 cr, prerequisite of COSC241). Tests updated to assert the correct ordering MATH141 → COSC241 → COSC354 in `e3b9a4d`. **1165 backend tests pass**, ruff, black, catalog doctor clean |
+
+Not in the repository despite the mission brief: Docker Compose and PostgreSQL. Accounts and
+records are JSON files under `backend/accounts` and `backend/student_records`.
+
+Open item handed to the AI agent: `test_dropped_second_prerequisite` no longer exercises its
+original scenario after the new prerequisites changed the engine's "not yet eligible" list.

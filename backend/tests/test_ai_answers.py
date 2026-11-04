@@ -267,3 +267,23 @@ def test_engine_text_passes_its_own_rephrasing_check(facts, heavy, question) -> 
     for f in (facts, heavy):
         prepared = deterministic_answer(f, question)
         assert check_rephrasing(prepared, prepared.text, f, question=question) == []
+
+
+def test_dropping_cosc354s_second_prerequisite_is_caught(facts) -> None:
+    """The original live failure: "COSC 354 is blocked because it requires COSC 220",
+    with COSC 241 - its second prerequisite - dropped. Built on the unlock answer,
+    which always names COSC 354's prerequisites, so it does not depend on which
+    courses lead the "not yet eligible" list (that list changed when the MATH
+    prerequisites were sourced). Verified against the integration catalog too."""
+    question = "What do I need before COSC 354?"
+    prepared = deterministic_answer(facts, question)
+    assert "COSC220" in prepared.text and "COSC241" in prepared.text
+    reply = (
+        "COSC354 Operating Systems is blocked for you right now. Its prerequisite is "
+        "COSC220 (in progress now). It is not a prerequisite for any course in the "
+        "encoded catalog. This comes from the catalog's prerequisite graph. The catalog "
+        "is still partial."
+    )
+    assert check_rephrasing(prepared, reply, facts, question=question) == [
+        "drops course codes from the engine's answer: COSC241"
+    ]

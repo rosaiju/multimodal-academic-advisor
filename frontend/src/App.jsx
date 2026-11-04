@@ -14,21 +14,32 @@ import { deleteRecord, getHealth, getPrograms, getRecord, logout } from './api'
 /**
  * COSC 490 Multimodal Academic Advisor.
  *
- * Three steps, matching the backend's own shape: upload (stores nothing), review
- * and confirm (the only way data becomes trusted), then the audit and plan.
+ * Two steps to get coursework in, matching the backend's own shape: upload
+ * (stores nothing), then review and confirm (the only way data becomes trusted).
+ * After that, a set of tools over the confirmed record: progress, the advisor,
+ * the semester plan, what-if, course comparison and deadlines.
  *
  * Nothing here knows a student id until the server issues one. `user` is null
  * until sign-in, and every student-scoped call uses `user.student_id`, so there
  * is no id for the frontend to guess, type, or get wrong.
  */
 
-const STEPS = [
+/*
+ * Two groups, because they are two different things. Getting coursework in is a
+ * one-time sequence (upload, then review); everything after that is a set of
+ * tools over the same confirmed record, used in any order. Numbering all eight as
+ * one long sequence implied a student had to walk through every screen in turn.
+ */
+const SETUP_STEPS = [
   { id: 'upload', label: 'Upload transcript' },
   { id: 'review', label: 'Review & confirm' },
-  { id: 'dashboard', label: 'Progress & advice' },
+]
+
+const TOOLS = [
+  { id: 'dashboard', label: 'Progress' },
   { id: 'advisor', label: 'Ask the advisor' },
-  { id: 'explore', label: 'What-if & unlocks' },
   { id: 'schedule', label: 'Semester plan' },
+  { id: 'explore', label: 'What-if & unlocks' },
   { id: 'compare', label: 'Compare courses' },
   { id: 'deadlines', label: 'Deadlines' },
 ]
@@ -94,8 +105,6 @@ export default function App() {
     setStep('upload')
   }
 
-  const activeIndex = STEPS.findIndex((s) => s.id === step)
-
   /**
    * Which steps the chips may jump to.
    *
@@ -112,59 +121,69 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-3">
           <div>
             <h1 className="font-semibold tracking-tight">Academic Advisor</h1>
             <p className="text-xs text-slate-500">
               Morgan State University · Computer Science · COSC 490
             </p>
           </div>
-          {/*
-            flex-wrap, not a fixed row: the fourth step ("Ask the advisor") pushed
-            this nav to 438px at a 400px viewport and scrolled the whole page
-            sideways. Chips wrap onto a second line on a phone instead.
-          */}
-          <nav className="flex flex-wrap items-center justify-end gap-1.5 text-xs">
-            {user && (
-              <div className="mr-3 flex items-center gap-2 border-r border-slate-200 pr-3">
-                <span className="max-w-40 truncate text-slate-600" title={user.email}>
-                  {user.name || user.email}
-                </span>
-                <button
-                  type="button"
-                  onClick={signOut}
-                  className="font-medium text-slate-900 underline underline-offset-2"
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
-            {user &&
-              STEPS.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => canVisit(s.id) && setStep(s.id)}
-                    disabled={!canVisit(s.id)}
-                    aria-current={i === activeIndex ? 'step' : undefined}
-                    className={`rounded-full px-2.5 py-1 font-medium transition ${
-                      i === activeIndex
-                        ? 'bg-slate-900 text-white'
-                        : canVisit(s.id)
-                          ? 'text-slate-600 hover:bg-slate-100'
-                          : 'cursor-not-allowed text-slate-300'
-                    }`}
-                  >
-                    {i + 1}. {s.label}
-                  </button>
-                  {i < STEPS.length - 1 && <span className="text-slate-300">›</span>}
-                </div>
-              ))}
-          </nav>
+          {user && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="max-w-40 truncate text-slate-600" title={user.email}>
+                {user.name || user.email}
+              </span>
+              <button
+                type="button"
+                onClick={signOut}
+                className="font-medium text-slate-900 underline underline-offset-2"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
+
+        {/*
+          One scrolling row rather than wrapping chips: eight wrapped chips took
+          three lines on a phone and pushed the page content below the fold. The
+          row scrolls sideways inside itself at 375px; the page never does.
+        */}
+        {user && (
+          <nav
+            aria-label="Main"
+            className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-6 pb-2 text-sm [scrollbar-width:thin]"
+          >
+            <NavGroup label="Add coursework">
+              {SETUP_STEPS.map((s, i) => (
+                <NavItem
+                  key={s.id}
+                  label={`${i + 1}. ${s.label}`}
+                  active={step === s.id}
+                  enabled={canVisit(s.id)}
+                  hint={s.id === 'review' ? 'Upload a transcript first' : undefined}
+                  onClick={() => setStep(s.id)}
+                />
+              ))}
+            </NavGroup>
+            <span aria-hidden="true" className="mx-2 h-5 w-px shrink-0 bg-slate-200" />
+            <NavGroup label="Your degree">
+              {TOOLS.map((s) => (
+                <NavItem
+                  key={s.id}
+                  label={s.label}
+                  active={step === s.id}
+                  enabled={canVisit(s.id)}
+                  hint="Confirm some coursework first"
+                  onClick={() => setStep(s.id)}
+                />
+              ))}
+            </NavGroup>
+          </nav>
+        )}
       </header>
 
-      <main className="px-6 py-8">
+      <main className="px-4 py-6 sm:px-6 sm:py-8">
         {booting && (
           <div className="flex justify-center py-16">
             <Spinner label="Connecting to the advising engine…" />
@@ -252,5 +271,38 @@ export default function App() {
         model. All data shown comes from the backend.
       </footer>
     </div>
+  )
+}
+
+/** A labelled cluster of nav buttons. The label is for screen readers and wide screens. */
+function NavGroup({ label, children }) {
+  return (
+    <div role="group" aria-label={label} className="flex shrink-0 items-center gap-1">
+      <span className="mr-1 hidden text-xs font-medium uppercase tracking-wide text-slate-400 2xl:inline">
+        {label}
+      </span>
+      {children}
+    </div>
+  )
+}
+
+function NavItem({ label, active, enabled, hint, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={() => enabled && onClick()}
+      disabled={!enabled}
+      title={enabled ? undefined : hint}
+      aria-current={active ? 'page' : undefined}
+      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition ${
+        active
+          ? 'bg-slate-900 text-white'
+          : enabled
+            ? 'text-slate-600 hover:bg-slate-100'
+            : 'cursor-not-allowed text-slate-300'
+      }`}
+    >
+      {label}
+    </button>
   )
 }

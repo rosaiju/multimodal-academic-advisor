@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { getUnlocks, simulateCourses } from '../api'
-import { Alert, Button, Card, Spinner } from './ui'
+import { Alert, Button, Card, EngineBadge, Spinner } from './ui'
 
 /**
  * What-if simulator and course unlock explorer.
@@ -78,9 +78,10 @@ function WhatIf() {
     <Card
       title="What if I take…?"
       subtitle="Try courses on a temporary copy of your record. Nothing is saved or changed."
+      action={<EngineBadge />}
     >
       <form onSubmit={run} className="space-y-3">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <label className="sr-only" htmlFor="whatif-courses">
             Courses to try
           </label>
@@ -305,8 +306,9 @@ function Unlocks() {
     <Card
       title="What does a course unlock?"
       subtitle="Follow the prerequisite graph: what a course needs, what it opens, and where you stand."
+      action={<EngineBadge />}
     >
-      <form onSubmit={submit} className="flex gap-2">
+      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
         <label className="sr-only" htmlFor="unlock-course">
           Course
         </label>

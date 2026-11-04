@@ -64,7 +64,8 @@ _COMPLETION_WORDS = re.compile(r"\b(complete|completed|finish|finished|pass|pass
 #: A what-if about NOT passing a course. Checked before _COMPLETION_WORDS, because
 #: "if I don't pass" contains "pass".
 _FAIL_WORDS = re.compile(
-    r"\b(fail|fails|failed|failing|flunk|don't pass|do not pass|not pass|withdraw|drop)\b"
+    r"\b(fail|fails|failed|failing|flunk\w*|bomb\w*|tank\w*|don't pass|do not pass|not pass|"
+    r"withdraw|drop)\b"
 )
 
 #: Words a student uses about themselves when they are struggling. Matched on what

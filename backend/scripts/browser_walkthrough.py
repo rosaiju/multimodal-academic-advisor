@@ -114,9 +114,7 @@ class Walkthrough:
         p.locator("input[type=file]").set_input_files(str(self.transcript))
         expect(p.get_by_text(self.transcript.name)).to_be_visible()
         p.get_by_role("button", name="Read transcript").click()
-        expect(p.get_by_text(re.compile(r"We read \d+ courses?"))).to_be_visible(
-            timeout=TIMEOUT_MS
-        )
+        expect(p.get_by_text(re.compile(r"We read \d+ courses?"))).to_be_visible(timeout=TIMEOUT_MS)
 
     def review(self):
         p = self.page
@@ -322,7 +320,9 @@ def main() -> int:
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=not args.headed, executable_path=chrome)
-        context = browser.new_context(viewport={"width": 1280, "height": 900}, accept_downloads=True)
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 900}, accept_downloads=True
+        )
         page = context.new_page()
         page.set_default_timeout(TIMEOUT_MS)
         errors: list[str] = []

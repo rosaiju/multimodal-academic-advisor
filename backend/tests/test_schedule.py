@@ -35,6 +35,23 @@ def morgan() -> Program:
     return load_program(CATALOG_DIR / "morgan_cosc_bs_2026_2028.yaml")
 
 
+def with_math141_stub(program: Program) -> Program:
+    """MATH141 as the zero-credit UNVERIFIED stub it was until 2026-11-04.
+
+    Its [COURSE] record has since been read, so the real catalog no longer holds an
+    unverified stub; this rebuilds one so the stub warning stays exercised.
+    """
+    courses = [
+        (
+            c.model_copy(update={"title": "UNVERIFIED - test stub", "credits": Decimal(0)})
+            if c.code == "MATH141"
+            else c
+        )
+        for c in program.courses
+    ]
+    return program.model_copy(update={"courses": courses})
+
+
 def record(*rows) -> StudentRecord:
     """rows are (code, grade) or (code, grade, credits)."""
     return StudentRecord(
@@ -195,7 +212,9 @@ class TestGenerate:
 
     def test_an_unverified_stub_course_is_flagged(self, morgan: Program) -> None:
         plan = generate_schedule(
-            morgan, record(("COSC111", "A", 4), ("COSC112", "A", 4)), start_term="Spring 2027"
+            with_math141_stub(morgan),
+            record(("COSC111", "A", 4), ("COSC112", "A", 4)),
+            start_term="Spring 2027",
         )
         stub = next(c for t in plan.terms for c in t.courses if c.course.code == "MATH141")
         assert any("no verified title" in w for w in stub.warnings)

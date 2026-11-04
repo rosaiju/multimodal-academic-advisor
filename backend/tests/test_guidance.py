@@ -42,6 +42,23 @@ def calendar():
     return load_calendar(DATA / "calendar" / "morgan_2026_2027.yaml")
 
 
+def with_math141_stub(program: Program) -> Program:
+    """MATH141 as the zero-credit UNVERIFIED stub it was until 2026-11-04.
+
+    Its [COURSE] record has since been read, so the real catalog no longer holds an
+    unverified stub; this rebuilds one so the stub warning stays exercised.
+    """
+    courses = [
+        (
+            c.model_copy(update={"title": "UNVERIFIED - test stub", "credits": Decimal(0)})
+            if c.code == "MATH141"
+            else c
+        )
+        for c in program.courses
+    ]
+    return program.model_copy(update={"courses": courses})
+
+
 def record(*rows, provenance=Provenance.STUDENT_CONFIRMED) -> StudentRecord:
     return StudentRecord(
         student_id="jane",
@@ -166,7 +183,7 @@ class TestCompare:
         assert by_code["COSC490"].unlocks == []
 
     def test_warns_about_irregular_offerings_and_unverified_stubs(self, morgan: Program) -> None:
-        c = compare(morgan, record(), "MATH141", "COSC349")
+        c = compare(with_math141_stub(morgan), record(), "MATH141", "COSC349")
         by_code = {f.code: f for f in c.courses}
         assert any("no verified title" in w for w in by_code["MATH141"].warnings)
         assert any("irregularly" in w for w in by_code["COSC349"].warnings)

@@ -10,7 +10,11 @@
 #   [GENED]   catalog.morgan.edu/preview_degree_planner.php?catoid=28&poid=6522
 #             University General Education Requirements.
 #   [COURSE]  catalog.morgan.edu/preview_course_nopop.php?catoid=28&coid=N
-#             Individual course records - used ONLY for prerequisite text.
+#             Individual course records - used for prerequisite text and the
+#             "Offered (...)" line, and for MATH141's title and credits (the one
+#             course no requirements page names). Each use cites its coid.
+#             Convention: a "... or departmental/instructor permission"
+#             alternative is never encoded; the course prerequisites are.
 #
 # TITLE NORMALIZATION (the only edit applied to any transcribed value)
 #   [PLANNER] appends general-education category tags to some titles and uses a
@@ -30,8 +34,8 @@
 #                -> "Women's and Gender Studies"
 #     (ENGL111/112 above are also printed on [GENED] with an em dash.)
 #
-# Course codes, titles and credits are transcribed from [PLANNER]. Prerequisites
-# come from [COURSE]. Where no source was consulted, the field is ABSENT and the
+# Course codes, titles and credits are transcribed from [PLANNER] (MATH141: from
+# [COURSE] coid=62675). Prerequisites come from [COURSE]. Where no source was consulted, the field is ABSENT and the
 # course carries a comment saying so - never a guess.
 #
 # STATUS: course layer sourced; disputed requirement blocks NOT encoded.
@@ -40,6 +44,12 @@
 #   yet express what they need (a course counting in two areas; "two courses from
 #   different disciplines"; "at least one lab"). See Q12-Q15 in
 #   docs/catalog-open-questions.md.
+#   Re-verified 2026-11-04 against freshly fetched [PLANNER]/[SEQ]/[GENED] and
+#   [COURSE] records; prerequisites added where a [COURSE] record was read, each
+#   citing its coid in a comment. Also not encoded (no engine block type or no
+#   unambiguous source): the 1-credit physical activity requirement (Q19), the
+#   Senior Departmental Comprehensive Examination (Q20), the three [PLANNER]
+#   tracks (Q17) and Natural Science Complementary Studies (Q18).
 #   [PLANNER] and [SEQ] are both official and they contradict each other on
 #   elective group membership and on how many courses each group needs. Those
 #   blocks stay out until the department resolves them.
@@ -63,57 +73,81 @@ major_subjects: [COSC]
 
 courses:
   # MATH141 is the one course here NOT named by [PLANNER]. It appears only as a
-  # prerequisite of COSC241 in [COURSE]. No title or credit source consulted, so
-  # both are left explicitly unverified and credits are 0 - a guessed credit value
-  # would flow into audit totals and produce a plausible-but-wrong number.
+  # prerequisite of COSC241. Until 2026-11-04 it was a zero-credit UNVERIFIED stub;
+  # its own [COURSE] record, coid=62675, now supplies title and credits:
+  # "MATH 141 - Precalculus  4 credits". Prerequisite printed: "Departmental Chair
+  # permission required in order to register" - not a course, so none encoded.
   - code: MATH141
-    title: "UNVERIFIED - named only as a COSC241 prerequisite, not in [PLANNER]"
-    credits: 0
+    title: "Precalculus"
+    credits: 4
 
   - code: ENGL101
     title: "Composition I"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62240 (retrieved 2026-11-04) prints NO prerequisite line.
 
   - code: ENGL111
     title: "Composition I - Honors"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62242 (retrieved 2026-11-04) prints NO prerequisite line.
 
   - code: ENGL102
     title: "Composition II"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62241: "ENGL 101 completed with a grade of 'C' or higher".
+    prerequisites: [ENGL101]
+    min_prereq_grade: "C"
 
   - code: ENGL112
     title: "Composition II - Honors"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62243: "ENGL 111 or ENGL 101 (with permission) completed with
+    # grades of 'C' or higher". The permission-gated ENGL101 path is not encoded
+    # (same convention as COSC241, COSC323, MATH242: permission alternatives are
+    # left to the advisor), so ENGL111 is the encoded prerequisite.
+    prerequisites: [ENGL111]
+    min_prereq_grade: "C"
 
   - code: MATH241
     title: "Calculus I"
     credits: 4
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62680: "ENGR 101 or MATH 114 or MATH 141 completed with a grade
+    # of 'C' or higher or Departmental permission required to register". NOT
+    # encoded: ENGR101 and MATH114 are not in this file, and [SEQ] schedules MATH241
+    # in a CS major's first semester, so most students enter by placement /
+    # permission - encoding MATH141 alone would wrongly block them.
 
   - code: MATH242
     title: "Calculus II"
     credits: 4
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62681: "MATH 241 completed with a grade of 'C' or higher or
+    # departmental permission required to register". Permission alternative not
+    # expressible (same convention as COSC241).
+    prerequisites: [MATH241]
+    min_prereq_grade: "C"
 
   - code: MATH312
     title: "Linear Algebra I"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62686: "MATH 241 completed with a grade of 'C' or higher".
+    prerequisites: [MATH241]
+    min_prereq_grade: "C"
 
   - code: MATH313
     title: "Linear Algebra II"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62687: "MATH 312 completed with a grade of 'C' or higher".
+    # Offered "(AS NEEDED)".
+    prerequisites: [MATH312]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: MATH331
     title: "Applied Probability and Statistics"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62689: "MATH 242 completed with a grade of 'C' or higher".
+    prerequisites: [MATH242]
+    min_prereq_grade: "C"
 
   - code: UNIV101
     title: "University First-Year Seminar"
@@ -128,7 +162,7 @@ courses:
   - code: COSC111
     title: "Introduction to Computer Science I"
     credits: 4
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62079 (retrieved 2026-11-04) prints NO prerequisite line.
 
   - code: COSC112
     title: "Introduction to Computer Science II"
@@ -191,18 +225,28 @@ courses:
   - code: COSC458
     title: "Software Engineering"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62115: "Prerequisite(s) COSC 220 completed with a grade of
+    # 'C' or higher". Offered "(FALL OR SPRING)" - once a year, term not fixed,
+    # so it keeps the conservative as-needed flag like COSC351/352/354/470.
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
     offered_as_needed: true
 
   - code: COSC459
     title: "Database Design"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=63662: "Prerequisite(s) COSC 220 completed with a grade of
+    # 'C' or higher". Offered "(FALL OR SPRING)" - flagged like COSC458.
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: COSC490
     title: "Senior Project"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62119: "Department Chair permission and Senior standing
+    # required to register". No course prerequisite; permission and class
+    # standing are not expressible as prerequisites, so none is encoded.
     offered_as_needed: true
 
   - code: COSC210
@@ -220,7 +264,8 @@ courses:
     credits: 4
     prerequisites: [COSC112]
     min_prereq_grade: "C"
-    offered_as_needed: true
+    # [COURSE] coid=62088 prints "Offered (FALL/SPRING)", not AS NEEDED. The
+    # as-needed flag an earlier pass set here was removed 2026-11-04.
 
   - code: COSC239
     title: "Java Programming"
@@ -259,12 +304,21 @@ courses:
   - code: COSC320
     title: "Algorithm Design and Analysis"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=63660: "COSC 220 and COSC 281 completed with grades of 'C'
+    # or higher". Offered "(AS NEEDED)".
+    prerequisites: [COSC220, COSC281]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: COSC323
     title: "Introduction to Cryptography"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=63661: "COSC 238 and MATH 312 completed with grades of 'C'
+    # or higher or instructor permission". The permission alternative is not
+    # expressible (same convention as COSC241). Offered "(AS NEEDED)".
+    prerequisites: [COSC238, MATH312]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: COSC332
     title: "Introduction to Game Design and Development"
@@ -338,7 +392,11 @@ courses:
   - code: COSC472
     title: "Introduction to Machine Learning"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=63664: "COSC 112 and MATH 312 completed with grades of 'C'
+    # or higher". Offered "(FALL OR SPRING)".
+    prerequisites: [COSC112, MATH312]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: COSC474
     title: "Artificial Intelligence in Cybersecurity"
@@ -348,7 +406,11 @@ courses:
   - code: COSC480
     title: "Introduction to Image Processing and Analysis"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=63665: "COSC 220 completed with a grade of 'C' or higher".
+    # Offered "(AS NEEDED)".
+    prerequisites: [COSC220]
+    min_prereq_grade: "C"
+    offered_as_needed: true
 
   - code: COSC486
     title: "Applied Quantum Computing"
@@ -365,13 +427,16 @@ courses:
   - code: COSC498
     title: "Senior Internship"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62121: "Must have 3.0 GPA and must be senior standing and
+    # Department Chair permission required to register." No course prerequisite;
+    # GPA, standing and permission are not expressible, so none is encoded.
     offered_as_needed: true
 
   - code: COSC499
     title: "Senior Research or Teaching/Tutorial Assistantship"
     credits: 3
-    # no prerequisite source consulted for this course yet
+    # [COURSE] coid=62122: "Must have G.P.A of 3.0 and must be senior standing
+    # and must have Department Chair permission in order to register". As COSC498.
     offered_as_needed: true
 
   - code: CLCO401
@@ -487,9 +552,12 @@ requirement_blocks:
     min_grade: C
     source: >-
       [PLANNER] heading "Required Courses for Computer Science Major", course list.
-      All twelve also appear in [SEQ]. The heading's CREDIT TOTAL is disputed
-      (65 there, 59 elsewhere) and is deliberately not encoded - only the course
-      list is, because both sources agree on it.
+      Eleven of the twelve are fixed rows in [SEQ] too. COSC243 is the exception:
+      [SEQ] names it only as a Group A elective option, and [PLANNER] lists it
+      both here and under Group A (open question Q16, re-checked 2026-11-04). It is
+      kept because [PLANNER] - the requirements page - prints it under this
+      heading. The heading's CREDIT TOTAL is disputed (65 there, 59 elsewhere) and
+      is deliberately not encoded - only the course list is.
     note: >-
       [PLANNER]: "students must complete the courses listed below with grades of
       'C' or higher".

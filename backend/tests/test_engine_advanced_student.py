@@ -189,13 +189,17 @@ class TestSchedule:
 
         assert len(planned) == len(set(planned))
         assert "COSC349" not in planned and "COSC220" not in planned
-        assert "MATH141" not in planned
+        # MATH141 (Precalculus) is a sourced prerequisite of COSC241 since the catalog
+        # read its course record on 2026-11-04, so it is planned, strictly before
+        # COSC241, which is strictly before COSC354.
+        term_of = {c.course.code: i for i, t in enumerate(plan.terms) for c in t.courses}
+        assert term_of["MATH141"] < term_of["COSC241"] < term_of["COSC354"]
         assert {"MATH312", "MATH331", "COSC352", "COSC458", "COSC490"} <= set(planned)
         assert all(t.credits <= plan.credit_target for t in plan.terms)
         assert plan.coverage_complete is False
         assert plan.last_planned_term is not None
         assert "not a graduation date" in plan.graduation_caveat
-        assert {u.course.code for u in plan.unscheduled} >= {"MATH141", "COSC354"}
+        assert not {"MATH141", "COSC241", "COSC354"} & {u.course.code for u in plan.unscheduled}
 
         layout = [(t.term, [c.course.code for c in t.courses]) for t in plan.terms]
         assert validate_schedule(morgan, avery, layout).valid

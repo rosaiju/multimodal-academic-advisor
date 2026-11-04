@@ -31,6 +31,23 @@ from app.schemas.provenance import Provenance
 MORGAN = Path(__file__).resolve().parents[2] / "data" / "catalog" / "morgan_cosc_bs_2026_2028.yaml"
 
 
+def with_math141_stub(program: Program) -> Program:
+    """MATH141 as the zero-credit UNVERIFIED stub it was until 2026-11-04.
+
+    Its [COURSE] record has since been read, so the real catalog no longer holds an
+    unverified stub; this rebuilds one so the stub warning stays exercised.
+    """
+    courses = [
+        (
+            c.model_copy(update={"title": "UNVERIFIED - test stub", "credits": Decimal(0)})
+            if c.code == "MATH141"
+            else c
+        )
+        for c in program.courses
+    ]
+    return program.model_copy(update={"courses": courses})
+
+
 @pytest.fixture(scope="module")
 def morgan() -> Program:
     return load_program(MORGAN)
@@ -242,7 +259,10 @@ class TestScheduleConstraints:
         assert "graduation_term" not in dumped and "graduation_date" not in dumped
 
     def test_unverified_entries_are_detected(self, morgan) -> None:
-        assert is_unverified(morgan.course("MATH141"))
+        # The real catalog has no unverified stub left (MATH141 was sourced on
+        # 2026-11-04), so detection is exercised on the stub as it used to be.
+        assert is_unverified(with_math141_stub(morgan).course("MATH141"))
+        assert not is_unverified(morgan.course("MATH141"))
         assert not is_unverified(morgan.course("COSC111"))
 
     def test_unsourced_prerequisites_are_called_out(self, morgan) -> None:

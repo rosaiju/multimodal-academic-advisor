@@ -4,6 +4,7 @@ import UploadStep from './components/UploadStep'
 import ReviewStep from './components/ReviewStep'
 import Dashboard from './components/Dashboard'
 import AdvisorChat from './components/AdvisorChat'
+import SemesterPlanner from './components/SemesterPlanner'
 import SignIn from './components/SignIn'
 import { deleteRecord, getHealth, getPrograms, getRecord, logout } from './api'
 
@@ -23,6 +24,7 @@ const STEPS = [
   { id: 'review', label: 'Review & confirm' },
   { id: 'dashboard', label: 'Progress & advice' },
   { id: 'advisor', label: 'Ask the advisor' },
+  { id: 'schedule', label: 'Semester plan' },
 ]
 
 export default function App() {
@@ -223,6 +225,8 @@ export default function App() {
             {step === 'advisor' && (
               <AdvisorChat hasRecord={hasRecord} onGoToUpload={() => setStep('upload')} />
             )}
+
+            {step === 'schedule' && <SemesterPlanner studentId={user.student_id} />}
           </>
         )}
       </main>

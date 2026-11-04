@@ -117,6 +117,25 @@ export const getAuditSummary = (studentId) => request(`/students/${studentId}/au
 export const getPlan = (studentId, limit = 8) =>
   request(`/students/${studentId}/plan?limit=${limit}`)
 
+/**
+ * POST /students/{id}/schedule - lay the remaining required courses out by term.
+ * `options` are { start_term?, credit_target?, include_summer? }.
+ */
+export const generateSchedule = (studentId, options = {}) =>
+  request(`/students/${studentId}/schedule`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  })
+
+/** POST /students/{id}/schedule/validate - check a hand-edited layout. */
+export const validateSchedule = (studentId, terms, creditTarget) =>
+  request(`/students/${studentId}/schedule/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ terms, credit_target: creditTarget }),
+  })
+
 /** GET /students/{id}/record - confirmed coursework with its audit trail. */
 export const getRecord = (studentId) => request(`/students/${studentId}/record`)
 

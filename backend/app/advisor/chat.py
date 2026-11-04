@@ -212,6 +212,7 @@ def ask(
     use_llm: bool = True,
     understanding_provider: ChatProvider | None = None,
     understanding: str | None = None,
+    rephrase: bool | None = None,
 ) -> AdvisorReply:
     """Answer one question. Never raises for a provider problem.
 
@@ -290,6 +291,15 @@ def ask(
     # A crisis reply is fixed text: no model rewrites it.
     if not use_llm or facts is None or prepared.intent in (Intent.NO_RECORD, Intent.CRISIS):
         return finish(base)
+
+    if not (get_settings().advisor_rephrase if rephrase is None else rephrase):
+        notice = "Answered from the degree engine; model rephrasing is switched off."
+        if understood_by == "model":
+            notice = (
+                "A language model read your question and chose this answer; the "
+                "degree engine wrote it. Model rephrasing is switched off."
+            )
+        return finish(replace(base, notice=notice))
 
     provider = provider or get_chat_provider()
     usable, reason = provider.available()

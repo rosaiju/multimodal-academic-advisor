@@ -331,3 +331,38 @@ def test_chat_endpoint_reports_understood_by(client) -> None:
     response = client.post("/advisor/chat", json={"message": "hello", "use_llm": False})
     assert response.status_code == 200
     assert response.json()["understood_by"] == "keywords"
+
+
+def test_rephrase_off_keeps_model_routing_and_skips_the_rephrasing_call(facts) -> None:
+    rephraser = Rephraser()
+    reply = ask(
+        facts,
+        "lay out my remaining terms",
+        student_id="ai-u",
+        conversation_id="c-rephrase-off",
+        provider=rephraser,
+        understanding_provider=Router({"intent": "plan_semesters"}),
+        rephrase=False,
+    )
+    assert reply.intent is Intent.PLAN_SEMESTERS
+    assert reply.understood_by == "model"
+    assert rephraser.calls == 0
+    # Engine text, labelled as engine text: the model only chose the answer.
+    assert reply.source == "engine" and reply.answer == reply.prepared
+    assert "language model read your question" in reply.notice
+    assert "switched off" in reply.notice
+
+
+def test_rephrase_off_with_keyword_routing_says_engine_only(facts) -> None:
+    reply = ask(
+        facts,
+        "How many credits am I missing?",
+        student_id="ai-u",
+        conversation_id="c-rephrase-off-kw",
+        provider=Rephraser(),
+        rephrase=False,
+    )
+    assert reply.understood_by == "keywords"
+    assert reply.source == "engine"
+    assert "language model read" not in reply.notice
+    assert "switched off" in reply.notice

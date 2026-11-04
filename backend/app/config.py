@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     #: Optional smaller/faster Ollama model just for routing (e.g. llama3.2:3b).
     #: Empty means the chat model is used.
     ollama_understanding_model: str = ""
+    #: False skips the model's rephrasing step and shows the engine's text, while
+    #: ADVISOR_UNDERSTANDING can still let a model pick the answer. On a laptop the
+    #: routing call takes seconds and rephrasing takes a minute or more.
+    advisor_rephrase: bool = True
 
     # --- Vision (scanned transcript reading) ---
     #: Empty keeps the original behaviour (follow LLM_PROVIDER: anthropic, else openai).

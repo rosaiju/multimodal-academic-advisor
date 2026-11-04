@@ -9,6 +9,7 @@ import {
   Spinner,
   StatusBadge,
 } from './ui'
+import WhyPanel from './WhyPanel'
 import { getAuditSummary, getPlan } from '../api'
 
 /**
@@ -26,6 +27,7 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
   const [summary, setSummary] = useState(null)
   const [plan, setPlan] = useState(null)
   const [error, setError] = useState(null)
+  const [openWhy, setOpenWhy] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -256,6 +258,17 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
                       Options: {gap.options.slice(0, 6).map((o) => o.code).join(', ')}
                       {gap.options.length > 6 && ` +${gap.options.length - 6} more`}
                     </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setOpenWhy(openWhy === gap.block_id ? null : gap.block_id)}
+                    aria-expanded={openWhy === gap.block_id}
+                    className="mt-2 text-xs font-medium text-slate-900 underline underline-offset-2"
+                  >
+                    {openWhy === gap.block_id ? 'Hide the details' : 'Why is this still open?'}
+                  </button>
+                  {openWhy === gap.block_id && (
+                    <WhyPanel studentId={studentId} blockId={gap.block_id} />
                   )}
                 </li>
               ))}

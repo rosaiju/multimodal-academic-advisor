@@ -136,6 +136,46 @@ export const validateSchedule = (studentId, terms, creditTarget) =>
     body: JSON.stringify({ terms, credit_target: creditTarget }),
   })
 
+/** GET /students/{id}/audit/explain/{block} - why a requirement is met or open. */
+export const explainBlock = (studentId, blockId) =>
+  request(`/students/${studentId}/audit/explain/${encodeURIComponent(blockId)}`)
+
+/** GET /catalog/{program}/courses - every course, for pickers. */
+export const getCatalogCourses = (programId) => request(`/catalog/${programId}/courses`)
+
+/** GET /students/{id}/compare - 2 to 4 courses side by side, for this student. */
+export const compareCourses = (studentId, codes) => {
+  const query = codes.map((c) => `codes=${encodeURIComponent(c)}`).join('&')
+  return request(`/students/${studentId}/compare?${query}`)
+}
+
+/** GET /students/{id}/deadlines - registration and commencement dates for this student. */
+export const getDeadlines = (studentId) => request(`/students/${studentId}/deadlines`)
+
+/**
+ * GET /students/{id}/deadlines.ics - the same dates as a calendar file.
+ *
+ * Fetched with the bearer token and saved from a blob, because a plain link would
+ * have to carry the token in the URL, and a token never goes in a URL.
+ */
+export async function downloadDeadlinesCalendar(studentId) {
+  let response
+  try {
+    response = await fetch(`${BASE}/students/${studentId}/deadlines.ics`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+  } catch {
+    throw new Error('Cannot reach the backend.')
+  }
+  if (!response.ok) throw new Error(`Could not build the calendar file (${response.status}).`)
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'deadlines.ics'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 /** GET /students/{id}/record - confirmed coursework with its audit trail. */
 export const getRecord = (studentId) => request(`/students/${studentId}/record`)
 

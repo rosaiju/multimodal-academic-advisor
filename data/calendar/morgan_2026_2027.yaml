@@ -1,0 +1,88 @@
+# Dates a Morgan State student plans around.
+#
+# SOURCED, NOT GUESSED. Every item below was read from the Morgan page named in its
+# `source` on the `retrieved` date. Nothing is estimated and nothing is generated.
+# Morgan's own pages say the dates are subject to change, so the UI repeats that.
+#
+# What this file does NOT have, and why: the official academic calendar (classes
+# begin, add/drop, last day to withdraw, finals, apply-for-graduation) is a Google
+# Doc linked from the registrar's page, and could not be read. Those dates are
+# listed under `not_yet_sourced` so the UI can say "go and look" instead of showing
+# a gap that looks like "no deadline". Add them here once someone reads the doc.
+
+version: 1
+institution: Morgan State University
+retrieved: "2026-11-04"
+
+# Registration group by earned credits, as the registrar's page defines them.
+# A student's own group is chosen from their earned credits, which INCLUDE transfer
+# credit. Honors students, athletes, veterans and SDSS students also register in the
+# first window regardless of standing, and the engine cannot know that about anyone.
+standings:
+  - {id: senior, label: "Senior (90+ earned credits)", min_credits: 90}
+  - {id: junior, label: "Junior (56 to 89 earned credits)", min_credits: 56}
+  - {id: sophomore, label: "Sophomore (25 to 55 earned credits)", min_credits: 25}
+  - {id: freshman, label: "Freshman (0 to 24 earned credits)", min_credits: 0}
+
+items:
+  - id: spring2027-priority-senior
+    title: "Spring 2027 priority registration opens"
+    kind: registration
+    standing: senior
+    date: 2026-11-02
+    detail: "Seniors with 90+ earned credits. Graduate, honors, athlete, veteran and SDSS students also open this day."
+    source: https://www.morgan.edu/office-of-the-registrar/priority-registration-time-ticket-groupings
+
+  - id: spring2027-priority-junior
+    title: "Spring 2027 priority registration opens"
+    kind: registration
+    standing: junior
+    date: 2026-11-09
+    detail: "Juniors with 56 to 89 earned credits."
+    source: https://www.morgan.edu/office-of-the-registrar/priority-registration-time-ticket-groupings
+
+  - id: spring2027-priority-sophomore
+    title: "Spring 2027 priority registration opens"
+    kind: registration
+    standing: sophomore
+    date: 2026-11-16
+    detail: "Sophomores with 25 to 55 earned credits."
+    source: https://www.morgan.edu/office-of-the-registrar/priority-registration-time-ticket-groupings
+
+  - id: spring2027-priority-freshman
+    title: "Spring 2027 priority registration opens"
+    kind: registration
+    standing: freshman
+    date: 2026-11-16
+    detail: "Freshmen with 0 to 24 earned credits."
+    source: https://www.morgan.edu/office-of-the-registrar/priority-registration-time-ticket-groupings
+
+  - id: spring2027-general-registration
+    title: "Spring 2027 general registration"
+    kind: registration
+    date: 2026-11-30
+    end_date: 2027-02-02
+    detail: "Open to all currently enrolled students. Closes February 2, 2027 at 5 PM ET."
+    source: https://www.morgan.edu/office-of-the-registrar/priority-registration-time-ticket-groupings
+
+  - id: fall2026-commencement
+    title: "Undergraduate commencement"
+    kind: graduation
+    date: 2026-12-18
+    detail: "Fall 2026 ceremony. The graduate ceremony is December 16, 2026."
+    source: https://www.morgan.edu/commencement/ceremonies/future-dates
+
+  - id: spring2027-commencement
+    title: "Undergraduate commencement"
+    kind: graduation
+    date: 2027-05-15
+    detail: "Spring 2027 ceremony. The graduate ceremony is May 13, 2027."
+    source: https://www.morgan.edu/commencement/ceremonies/future-dates
+
+not_yet_sourced:
+  - title: "Classes begin, add/drop and last day to withdraw"
+    where_to_look: "The Fall 2026 to Summer 2027 academic calendar linked from the registrar's page, or the Office of the Registrar at 443.885.3300."
+    source: https://www.morgan.edu/office-of-the-registrar/academic-calendar
+  - title: "Deadline to apply for graduation"
+    where_to_look: "Your advisor or the Office of the Registrar. The commencement page does not list one."
+    source: https://www.morgan.edu/commencement/ceremonies/future-dates

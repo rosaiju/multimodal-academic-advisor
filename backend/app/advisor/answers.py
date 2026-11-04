@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from app.advisor.facts import AdvisorFacts, _subject_of
+from app.advisor.facts import AdvisorFacts, _subject_of, every_option_required
 from app.audit.compare import ComparisonError, compare_courses
 from app.audit.explain_audit import BlockExplanation, explain_all
 from app.audit.impact import PrereqNode, UnlockEntry, explore_unlocks
@@ -493,7 +493,8 @@ def answer_remaining(facts: AdvisorFacts, *, confirming: bool = False) -> Ground
         if block["options"]:
             shown = ", ".join(block["options"][:6])
             more = "" if len(block["options"]) <= 6 else ", ..."
-            piece += f"\n  Options: {shown}{more}"
+            label = "All of these are needed" if every_option_required(block) else "Options"
+            piece += f"\n  {label}: {shown}{more}"
             citations.extend(block["options"][:6])
         lines.append(piece)
 

@@ -31,13 +31,18 @@ from app.audit.evaluators import (
     evaluate_gpa,
     evaluate_n_of,
     evaluate_residency,
-    gpa_points,
+    hold_for_pass_grades,
+)
+from app.audit.grades import (
+    earns_credit,
+    gpa_figures,
+    gpa_policy_note,
+    is_in_progress,
+    is_recognised,
 )
 from app.audit.optimal import SLOT_BLOCKS, assign_optimally
-from app.audit.record import StudentRecord
+from app.audit.record import CompletedCourse, StudentRecord
 from app.catalog.schema import (
-    IN_PROGRESS_GRADES,
-    NON_PASSING,
     AllOfBlock,
     CreditsFromBlock,
     EachOfBlock,
@@ -58,17 +63,19 @@ from app.schemas.audit import (
 
 
 def _is_passing(grade: str) -> bool:
-    """True for a grade that earned its credit.
+    """True for a grade KNOWN to earn credit (A-D, P, S, CR).
 
-    Uses the catalog's own NON_PASSING set rather than a second list, so "does this
-    count" has exactly one answer in this codebase.
+    In-progress grades (IP, REG, INC) earn nothing yet, and a grade the engine does
+    not recognise earns nothing until someone says what it means. Before this, REG
+    and INC were counted as earned AND in progress at the same time, and any
+    unknown grade (WF, NR, ...) was counted as earned.
     """
-    return grade.strip().upper().rstrip("+-") not in NON_PASSING
+    return earns_credit(grade)
 
 
 def _is_in_progress(grade: str) -> bool:
     """Registered but unfinished. Credit attempted, none earned."""
-    return grade.strip().upper() in IN_PROGRESS_GRADES
+    return is_in_progress(grade)
 
 
 #: Blocks that decide from the whole record rather than by consuming courses.
@@ -81,18 +88,20 @@ def _evaluate(
     """Dispatch one block to its evaluator."""
     match block:
         case AllOfBlock():
-            return evaluate_all_of(program, block, pool)
+            result, consumed = evaluate_all_of(program, block, pool)
         case NOfBlock():
-            return evaluate_n_of(program, block, pool)
+            result, consumed = evaluate_n_of(program, block, pool)
         case EachOfBlock():
-            return evaluate_each_of_pool(program, block, pool)
+            result, consumed = evaluate_each_of_pool(program, block, pool)
         case CreditsFromBlock():
-            return evaluate_credits_from(program, block, pool)
+            result, consumed = evaluate_credits_from(program, block, pool)
         case GpaBlock():
             return evaluate_gpa(program, block, pool)
         case ResidencyBlock():
             return evaluate_residency(program, block, pool)
-    raise ValueError(f"no evaluator for block type {block.type!r}")  # pragma: no cover
+        case _:  # pragma: no cover
+            raise ValueError(f"no evaluator for block type {block.type!r}")
+    return hold_for_pass_grades(program, block, pool, consumed, result), consumed
 
 
 def _coverage(program: Program) -> CatalogCoverage:
@@ -118,6 +127,62 @@ def _coverage(program: Program) -> CatalogCoverage:
         credits_explicitly_demanded=demanded,
         total_credits_required=program.total_credits_required,
     )
+
+
+def _credit_totals(
+    program: Program, completed: list[CompletedCourse]
+) -> tuple[Decimal, Decimal, list[str]]:
+    """Earned credit, in-progress credit, and what the engine could not decide.
+
+    EARNED is every trusted credit-earning row on the record, catalog or not. It is
+    a different quantity from total_credits_applied, which counts only what landed
+    in an encoded block - conflating the two showed a student with 150 credits as
+    45% done.
+
+    A course the catalog names is earned ONCE however many times it was passed: a
+    retake is one course. Codes the catalog does not name are summed row by row,
+    because DegreeWorks gives many distinct transfer courses one bucket code
+    (COSC116TR) and collapsing them would drop real credit.
+    """
+    notes: list[str] = []
+    earned = Decimal(0)
+    best: dict[str, Decimal] = {}
+    passes: dict[str, int] = {}
+    unknown: list[str] = []
+    for c in completed:
+        if not c.is_trusted:
+            continue
+        if not is_recognised(c.grade):
+            unknown.append(f"{c.code} ({c.grade.strip()})")
+            continue
+        if not _is_passing(c.grade):
+            continue
+        if program.course(c.code) is not None:
+            best[c.code] = max(best.get(c.code, Decimal(0)), c.credits)
+            passes[c.code] = passes.get(c.code, 0) + 1
+        else:
+            earned += c.credits
+    earned += sum(best.values(), Decimal(0))
+
+    repeated = sorted(code for code, n in passes.items() if n > 1)
+    if repeated:
+        notes.append(
+            "Passed more than once: " + ", ".join(repeated) + ". Credit is counted once "
+            "per course. If one of these is repeatable for credit (a special topics "
+            "course, for example), an advisor must confirm it - the catalog does not "
+            "say which courses are."
+        )
+    if unknown:
+        notes.append(
+            "Unrecognised grade(s): " + ", ".join(unknown) + ". Their credit is NOT "
+            "counted as earned until the registrar confirms what the grade means."
+        )
+
+    in_progress = sum(
+        (c.credits for c in completed if c.is_trusted and _is_in_progress(c.grade)),
+        Decimal(0),
+    )
+    return earned, in_progress, notes
 
 
 def run_audit(
@@ -146,6 +211,8 @@ def run_audit(
         else {}
     )
 
+    reserved: set[int] = {i for indices in preassigned.values() for i in indices}
+
     # Course CODES already applied somewhere. A retake is two transcript rows but
     # one course as far as the degree is concerned, so consuming one row must put
     # the other out of reach of every later block - under either strategy.
@@ -171,6 +238,11 @@ def run_audit(
             taken = {indices[i] for i in consumed}
         else:
             pool_indices = _free()
+            if strategy is MatcherStrategy.OPTIMAL_BIPARTITE:
+                # credits_from is resolved from what the global matching LEFT OVER.
+                # Without this, a credits_from block listed before a slot block in
+                # the catalog spent the course the matching had given to that block.
+                pool_indices = [i for i in pool_indices if i not in reserved]
             result, consumed = _evaluate(program, block, [completed[i] for i in pool_indices])
             blocks.append(result)
             taken = {pool_indices[i] for i in consumed}
@@ -180,10 +252,6 @@ def run_audit(
 
     applied_courses = [a for b in blocks for a in b.applied]
     total_applied = sum((a.credits_applied for a in applied_courses), Decimal(0))
-
-    trusted = [c for c in completed if c.is_trusted and program.course(c.code) is not None]
-    majors = {s.upper() for s in program.major_subjects}
-    major_courses = [c for c in trusted if program.course(c.code).subject in majors]
 
     unapplied = [
         applied_course(program, completed[i])
@@ -209,18 +277,15 @@ def run_audit(
         if c.is_trusted and program.course(c.code) is None
     ]
 
-    # EARNED is every trusted passing credit on the record, catalog or not. It is a
-    # different quantity from total_applied, which counts only what landed in an
-    # encoded block, and conflating the two is what showed a student with 150
-    # credits as 45% done.
-    earned = sum(
-        (c.credits for c in completed if c.is_trusted and _is_passing(c.grade)),
-        Decimal(0),
-    )
-    in_progress_credits = sum(
-        (c.credits for c in completed if c.is_trusted and _is_in_progress(c.grade)),
-        Decimal(0),
-    )
+    earned, in_progress_credits, notes = _credit_totals(program, completed)
+
+    cumulative = gpa_figures(program, completed, "cumulative")
+    major = gpa_figures(program, completed, "major")
+    gpa_notes = [
+        n
+        for n in (gpa_policy_note(cumulative, "cumulative"), gpa_policy_note(major, "major"))
+        if n is not None
+    ]
 
     return AuditResult(
         student_id=record.student_id,
@@ -231,10 +296,15 @@ def run_audit(
         total_credits_earned=earned,
         total_credits_in_progress=in_progress_credits,
         gpa=GpaSummary(
-            cumulative=gpa_points(trusted),
-            major=gpa_points(major_courses),
+            cumulative=cumulative.value,
+            major=major.value,
             min_cumulative_required=program.min_gpa,
             min_major_required=program.min_major_gpa,
+            cumulative_low=cumulative.low,
+            cumulative_high=cumulative.high,
+            major_low=major.low,
+            major_high=major.high,
+            notes=gpa_notes,
         ),
         blocks=blocks,
         unapplied=unapplied,
@@ -243,4 +313,5 @@ def run_audit(
         critical_path=[],
         strategy=strategy,
         coverage=_coverage(program),
+        notes=notes,
     )

@@ -4,13 +4,18 @@ import tailwindcss from '@tailwindcss/vite'
 
 // The backend is proxied under /api during development, so the browser makes
 // same-origin requests and CORS never enters the picture.
+//
+// VITE_API_TARGET points the proxy at a different backend (e.g. a second dev
+// server on another port) without editing this file. Default: 127.0.0.1:8000.
+const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8000'
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: apiTarget,
         changeOrigin: true,
         ws: true,
         rewrite: (path) => path.replace(/^\/api/, ''),

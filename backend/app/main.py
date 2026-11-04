@@ -19,7 +19,9 @@ from app.routers import auth as auth_router
 from app.routers import catalog as catalog_router
 from app.routers import chat as chat_router
 from app.routers import explore as explore_router
+from app.routers import guidance as guidance_router
 from app.routers import ingest as ingest_router
+from app.routers import schedule as schedule_router
 from app.routers import voice as voice_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -32,6 +34,8 @@ async def lifespan(app: FastAPI):
     # Deliberately NOT wrapped in try/except: a malformed catalog must stop the
     # server, not start it with silently-wrong degree requirements.
     registry.load(settings.catalog_dir)
+    # Same for the calendar: a malformed date file must stop startup, not mislead.
+    guidance_router.calendar()
 
     # Registered here, from outside the ingestion package, so app/ingestion/ never
     # imports app/llm/. Absent an API key this is a no-op and text transcripts
@@ -118,6 +122,8 @@ app.include_router(auth_router.router)
 app.include_router(catalog_router.router)
 app.include_router(ingest_router.router)
 app.include_router(audit_router.router)
+app.include_router(schedule_router.router)
+app.include_router(guidance_router.router)
 app.include_router(chat_router.router)
 app.include_router(voice_router.router)
 app.include_router(explore_router.router)

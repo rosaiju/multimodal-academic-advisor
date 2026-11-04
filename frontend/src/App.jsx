@@ -5,6 +5,9 @@ import ReviewStep from './components/ReviewStep'
 import Dashboard from './components/Dashboard'
 import AdvisorChat from './components/AdvisorChat'
 import Explorer from './components/Explorer'
+import SemesterPlanner from './components/SemesterPlanner'
+import CourseCompare from './components/CourseCompare'
+import Deadlines from './components/Deadlines'
 import SignIn from './components/SignIn'
 import { deleteRecord, getHealth, getPrograms, getRecord, logout } from './api'
 
@@ -25,6 +28,9 @@ const STEPS = [
   { id: 'dashboard', label: 'Progress & advice' },
   { id: 'advisor', label: 'Ask the advisor' },
   { id: 'explore', label: 'What-if & unlocks' },
+  { id: 'schedule', label: 'Semester plan' },
+  { id: 'compare', label: 'Compare courses' },
+  { id: 'deadlines', label: 'Deadlines' },
 ]
 
 export default function App() {
@@ -229,6 +235,14 @@ export default function App() {
             {step === 'explore' && (
               <Explorer hasRecord={hasRecord} onGoToUpload={() => setStep('upload')} />
             )}
+
+            {step === 'schedule' && <SemesterPlanner studentId={user.student_id} />}
+
+            {step === 'compare' && (
+              <CourseCompare studentId={user.student_id} programId={programId} />
+            )}
+
+            {step === 'deadlines' && <Deadlines studentId={user.student_id} />}
           </>
         )}
       </main>

@@ -35,7 +35,7 @@ from app.audit.prereq_graph import (
     unmet_prerequisites,
 )
 from app.audit.record import StudentRecord
-from app.catalog.schema import IN_PROGRESS_GRADES, Program
+from app.catalog.schema import IN_PROGRESS_GRADES, Program, grade_meets
 from app.schemas.audit import AuditResult, BlockStatus, CourseRef
 from app.schemas.provenance import Provenance
 
@@ -102,6 +102,24 @@ class AdvisingPlan(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+def blocks_needing_retake(program: Program, code: str, grade: str) -> list[str]:
+    """Requirement blocks that list `code` but whose minimum `grade` does not meet.
+
+    A D in COSC111 earns credit, and Morgan's major block asks for a C. The course
+    is "passed" for credit and still has to be taken again for the requirement.
+    Returns block names, in catalog order; empty when no block needs a retake.
+    """
+    out: list[str] = []
+    for block in program.requirement_blocks:
+        if not hasattr(block, "courses") and getattr(block, "course_filter", None) is None:
+            continue  # gpa / residency blocks list no courses
+        if code not in {c.code for c in program.courses_for_block(block)}:
+            continue
+        if not grade_meets(grade, block.min_grade):
+            out.append(block.name)
+    return out
+
+
 def _gap(program: Program, block_result) -> RequirementGap:
     still_needed = None
     if block_result.courses_required is not None and block_result.courses_applied is not None:
@@ -147,6 +165,12 @@ def build_plan(
     }
 
     completed_refs = [a.course for b in audit.blocks for a in b.applied]
+    applied_codes = {r.code for r in completed_refs}
+    block_min = {b.id: b.min_grade for b in program.requirement_blocks}
+    block_names = {b.block_id: b.name for b in audit.blocks}
+    #: Courses passed for credit but below a still-open block's minimum grade:
+    #: code -> (grade on record, minimum it falls short of).
+    retakes: dict[str, tuple[str, str]] = {}
     completed_credits = sum((r.credits for r in completed_refs), Decimal(0))
 
     unfinished = [
@@ -166,8 +190,16 @@ def build_plan(
             block.courses_required is not None and len(block.still_needed) <= block.courses_required
         )
         for ref in block.still_needed:
-            if ref.code in passed or ref.code in in_progress_codes:
+            if ref.code in in_progress_codes or ref.code in applied_codes:
                 continue
+            if ref.code in passed:
+                minimum = block_min.get(block.block_id, "D")
+                if grade_meets(passed[ref.code], minimum):
+                    continue
+                # Passed for credit, below this block's minimum: a retake. Before
+                # this, `passed` alone excluded it, so a student with a D in a
+                # "C or better" course was never told to take it again.
+                retakes.setdefault(ref.code, (passed[ref.code], minimum))
             serves.setdefault(ref.code, []).append(block.block_id)
             if outright:
                 required_outright.add(ref.code)
@@ -183,13 +215,22 @@ def build_plan(
         missing = unmet_prerequisites(program, code, passed)
         eligible = not missing
         chain = remaining_depth(program, code, passed)
+        if code in retakes:
+            chain = max(chain, 1)  # remaining_depth calls a passed course done
         unlocked = unlocks(program, code)
 
+        # Students read these. Block NAMES here; ids stay in the structured `serves`.
+        names = [block_names.get(b, b) for b in block_ids]
         reasons = [
             f"required by {len(block_ids)} unfinished requirement"
             + ("s" if len(block_ids) > 1 else "")
-            + f": {', '.join(block_ids)}"
+            + f": {', '.join(names)}"
         ]
+        if code in retakes:
+            have, need = retakes[code]
+            reasons.append(
+                f"retake: your grade of {have} is below the {need} this requirement needs"
+            )
         if chain > 1:
             reasons.append(
                 f"{chain} terms of prerequisites still ahead - starting later delays graduation"

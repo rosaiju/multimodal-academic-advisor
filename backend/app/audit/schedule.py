@@ -35,7 +35,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.audit.engine import run_audit
-from app.audit.planning import build_plan
+from app.audit.planning import blocks_needing_retake, build_plan
 from app.audit.prereq_graph import passed_courses, unmet_prerequisites
 from app.audit.record import CompletedCourse, StudentRecord
 from app.catalog.schema import IN_PROGRESS_GRADES, Program, Term
@@ -132,6 +132,14 @@ class SchedulePlan(BaseModel):
     #: The last term with a planned course. NOT a graduation date: requirements the
     #: catalog does not encode yet are absent from the plan, not met.
     last_planned_term: str | None = None
+    #: False whenever the catalog is only partly encoded. While False, nothing in
+    #: this plan - least of all `last_planned_term` - is a graduation date.
+    coverage_complete: bool = False
+    #: Always present, so no caller can render the plan without the warning.
+    graduation_caveat: str = (
+        "This plan is not a graduation date. It schedules only the requirements the "
+        "catalog currently encodes, and assumes every course is passed and offered."
+    )
     caveats: list[str] = Field(default_factory=list)
     #: Always VERIFIED: derived from catalog data by deterministic rules.
     provenance: Provenance = Provenance.VERIFIED
@@ -148,6 +156,16 @@ class ScheduleValidation(BaseModel):
     #: False when any issue is an error. Warnings alone leave a plan valid.
     valid: bool
     issues: list[ScheduleIssue] = Field(default_factory=list)
+
+
+def is_unverified(course) -> bool:
+    """A catalog entry without a verified title or credit value.
+
+    MATH141 is in the Morgan file only because COSC241 names it as a prerequisite;
+    its title says UNVERIFIED. Such an entry is never placed as a normal planned
+    course - it is listed as "confirm with an advisor" instead.
+    """
+    return course.title.strip().upper().startswith("UNVERIFIED") or course.credits <= 0
 
 
 def _ref(program: Program, code: str) -> CourseRef:
@@ -233,6 +251,8 @@ def generate_schedule(
 
     terms: list[PlannedTerm] = []
     empty_run = 0
+    #: Unverified catalog entries something needs: never planned as a normal course.
+    needs_confirmation: dict[str, set[str]] = {}
 
     for _ in range(max_terms):
         audit = run_audit(program, sim, MatcherStrategy.OPTIMAL_BIPARTITE)
@@ -250,11 +270,14 @@ def generate_schedule(
             ):
                 continue
             course = program.course(code)
+            if course is not None and is_unverified(course):
+                needs_confirmation.setdefault(code, set()).update(needed_for)
+                continue
             warnings = []
-            if course is not None and course.title.upper().startswith("UNVERIFIED"):
+            if course is not None and course.offered_as_needed:
                 warnings.append(
-                    "the catalog names this course only as a prerequisite and has no "
-                    "verified title or credits for it. Confirm it with an advisor."
+                    "the catalog lists this as offered irregularly - confirm it runs before "
+                    "relying on it"
                 )
             candidates.append(
                 (code, [f"prerequisite for {', '.join(sorted(needed_for))}"], warnings, [])
@@ -265,6 +288,10 @@ def generate_schedule(
             plan.recommended,
             key=lambda r: bool(program.course(r.course.code).offered_as_needed),  # type: ignore[union-attr]
         ):
+            course = program.course(rec.course.code)
+            if course is not None and is_unverified(course):
+                needs_confirmation.setdefault(rec.course.code, set()).update(rec.serves)
+                continue
             candidates.append((rec.course.code, rec.reasons, list(rec.warnings), rec.serves))
 
         chosen: list[PlannedCourse] = []
@@ -307,11 +334,17 @@ def generate_schedule(
     # Whatever is still needed after the last planned term.
     audit = run_audit(program, sim, MatcherStrategy.OPTIMAL_BIPARTITE)
     leftover = build_plan(program, sim, audit, limit=10_000)
+
+    def _why_unplaced(ref: CourseRef) -> str:
+        if ref.credits > credit_target:
+            return (
+                f"worth {ref.credits} credits, more than the {credit_target}-credit "
+                "per-term target - raise the target to place it"
+            )
+        return "not offered in any planned term, or the planning horizon ended first"
+
     unscheduled = [
-        UnscheduledCourse(
-            course=r.course,
-            reason="not offered in any planned term, or the planning horizon ended first",
-        )
+        UnscheduledCourse(course=r.course, reason=_why_unplaced(r.course))
         for r in leftover.recommended
     ] + [
         UnscheduledCourse(
@@ -320,6 +353,18 @@ def generate_schedule(
         )
         for r in leftover.blocked
     ]
+    placed = {u.course.code for u in unscheduled}
+    unscheduled = [
+        UnscheduledCourse(
+            course=_ref(program, code),
+            reason="the catalog has no verified title or credits for this course, so it is "
+            "not planned. Confirm it with an advisor"
+            + (f" - needed for {', '.join(sorted(needed_for))}" if needed_for else "")
+            + ".",
+        )
+        for code, needed_for in sorted(needs_confirmation.items())
+        if code not in placed
+    ] + unscheduled
 
     caveats: list[str] = []
     if audit.coverage is not None and not audit.coverage.is_complete:
@@ -339,6 +384,21 @@ def generate_schedule(
             "The catalog does not record which terms most courses run, so they are assumed "
             "to run in both fall and spring. Check the schedule of classes before registering."
         )
+    no_prereqs_recorded = sorted(
+        c.course.code
+        for t in terms
+        for c in t.courses
+        if not program.course(c.course.code).prerequisites  # type: ignore[union-attr]
+        and not program.course(c.course.code).prerequisite_groups  # type: ignore[union-attr]
+        and c.course.number >= 102
+    )
+    if no_prereqs_recorded:
+        caveats.append(
+            "The catalog records no prerequisites for "
+            + ", ".join(no_prereqs_recorded)
+            + ". Where a prerequisite exists but was never sourced, this plan cannot "
+            "order it - check each course's prerequisites before registering."
+        )
     if in_progress_assumed:
         caveats.append("Courses you are taking now are assumed to be passed.")
     caveats.append(
@@ -351,6 +411,7 @@ def generate_schedule(
             "below the plan; talk to an advisor before relying on this schedule."
         )
 
+    coverage_complete = audit.coverage is not None and audit.coverage.is_complete
     return SchedulePlan(
         student_id=record.student_id,
         program_id=program.program_id,
@@ -360,6 +421,7 @@ def generate_schedule(
         terms=terms,
         unscheduled=unscheduled,
         last_planned_term=terms[-1].term if terms else None,
+        coverage_complete=coverage_complete,
         caveats=caveats,
     )
 
@@ -380,6 +442,13 @@ def validate_schedule(
     issues: list[ScheduleIssue] = []
     sim = _with_in_progress_passed(record)
     passed = passed_courses(program, sim.completed)
+    #: Best grade actually ON the record (in-progress excluded), for retake checks.
+    on_record = passed_courses(program, record.completed)
+    in_progress_now = {
+        c.code
+        for c in record.completed
+        if c.is_trusted and c.grade.strip().upper() in IN_PROGRESS_GRADES
+    }
     taken_in_plan: set[str] = set()
     previous_order: int | None = None
 
@@ -418,7 +487,21 @@ def validate_schedule(
                 continue
 
             total += course.credits
-            if code in passed or code in taken_in_plan or code in placed_now:
+            retake_for: list[str] = []
+            if code in on_record and code not in taken_in_plan and code not in placed_now:
+                retake_for = blocks_needing_retake(program, code, on_record[code])
+            if code in in_progress_now and code not in on_record:
+                issues.append(
+                    ScheduleIssue(
+                        severity="error",
+                        term=label,
+                        course=code,
+                        message=f"{code} is in progress now. Plan it again only if you "
+                        "do not pass it.",
+                    )
+                )
+                continue
+            if (code in passed and not retake_for) or code in taken_in_plan or code in placed_now:
                 issues.append(
                     ScheduleIssue(
                         severity="error",
@@ -428,6 +511,16 @@ def validate_schedule(
                     )
                 )
                 continue
+            if retake_for:
+                issues.append(
+                    ScheduleIssue(
+                        severity="warning",
+                        term=label,
+                        course=code,
+                        message=f"{code} is a retake: your {on_record[code]} is below the "
+                        f"minimum grade for {', '.join(retake_for)}.",
+                    )
+                )
 
             missing = unmet_prerequisites(program, code, passed)
             if missing:

@@ -19,6 +19,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
+from app.audit.grades import is_pass_grade
 from app.audit.planning import build_plan
 from app.audit.prereq_graph import passed_courses, unmet_prerequisites
 from app.audit.record import StudentRecord
@@ -82,7 +83,10 @@ def _headline(block, result, audit: AuditResult) -> str:
     if result.status is BlockStatus.SATISFIED:
         return "Done. This requirement is met."
     if result.status is BlockStatus.NEEDS_ADVISOR:
-        return "The catalog leaves this one to an advisor, so it can't be called met or unmet."
+        if getattr(block, "advisor_approval_required", False) or not result.note:
+            return "The catalog leaves this one to an advisor, so it can't be called met or unmet."
+        # The engine held it: a pass grade, a GPA that depends on an unencoded rule.
+        return "An advisor has to confirm this one. " + result.note
     if block_type == "gpa":
         have = audit.gpa.major if block.scope == "major" else audit.gpa.cumulative
         need = block.min_gpa
@@ -131,9 +135,23 @@ def explain_block(
         for applied in other.applied:
             spent_on.setdefault(applied.course.code, other.name)
 
+    # One row per course, the most telling one: an attempt under way now says more
+    # than an old F, and the best finished grade says more than a worse one. Taking
+    # the first row on the transcript told a student retaking a course that their
+    # old F was the whole story.
+    def _telling(r) -> tuple:
+        g = r.grade.strip().upper()
+        rank = {"A": 0, "B": 1, "C": 2, "D": 3}.get(g.rstrip("+-"), 4)
+        return (not r.is_trusted, g not in IN_PROGRESS_GRADES, rank)
+
+    rows_by_code: dict[str, list] = {}
+    for r in record.completed:
+        rows_by_code.setdefault(r.code, []).append(r)
+    ordered = [min(rows, key=_telling) for rows in rows_by_code.values()]
+
     not_counted: list[NotCounted] = []
     seen: set[str] = set()
-    for row in record.completed:
+    for row in ordered:
         if row.code not in candidates or row.code in counted_codes or row.code in seen:
             continue
         grade = row.grade.strip().upper()
@@ -141,6 +159,11 @@ def explain_block(
             reason = "Not confirmed yet, so it can't count."
         elif grade in IN_PROGRESS_GRADES:
             reason = "In progress. It counts once a final grade is recorded."
+        elif is_pass_grade(row.grade):
+            reason = (
+                f"A pass grade ({row.grade.strip()}). Whether a pass meets the {min_grade} "
+                "this requirement needs is not in the catalog, so an advisor must confirm it."
+            )
         elif not grade_meets(row.grade, min_grade):
             reason = f"Your grade of {row.grade} is below the {min_grade} this requirement needs."
         elif row.code in spent_on:

@@ -186,19 +186,43 @@ class TestGenerate:
                     assert any("irregularly" in w for w in item.warnings)
 
     def test_schedules_a_prerequisite_no_requirement_lists(self, morgan: Program) -> None:
-        """COSC354 needs COSC241, which needs MATH141. No block lists either of those."""
+        """COSC354 needs COSC241, which needs MATH141. No block lists either of those.
+
+        MATH141 is an UNVERIFIED stub in the real file, so the chain is checked on a
+        variant where it has been verified; the real file's behaviour is the next test.
+        """
+        verified = morgan.model_copy(
+            update={
+                "courses": [
+                    (
+                        c.model_copy(update={"title": "Precalculus", "credits": Decimal(4)})
+                        if c.code == "MATH141"
+                        else c
+                    )
+                    for c in morgan.courses
+                ]
+            }
+        )
         rec = record(("COSC111", "A", 4), ("COSC112", "A", 4))
-        plan = generate_schedule(morgan, rec, start_term="Spring 2027")
+        plan = generate_schedule(verified, rec, start_term="Spring 2027")
         where = {c.course.code: i for i, t in enumerate(plan.terms) for c in t.courses}
         assert where["MATH141"] < where["COSC241"] < where["COSC354"]
         assert not plan.unscheduled
 
-    def test_an_unverified_stub_course_is_flagged(self, morgan: Program) -> None:
+    def test_an_unverified_stub_course_is_never_planned(self, morgan: Program) -> None:
+        """Lead walkthrough: MATH141 (UNVERIFIED, no sourced credits) was placed as a
+        normal course in the first term. It is listed for an advisor instead."""
         plan = generate_schedule(
             morgan, record(("COSC111", "A", 4), ("COSC112", "A", 4)), start_term="Spring 2027"
         )
-        stub = next(c for t in plan.terms for c in t.courses if c.course.code == "MATH141")
-        assert any("no verified title" in w for w in stub.warnings)
+        planned = {c.course.code for t in plan.terms for c in t.courses}
+        assert "MATH141" not in planned
+        assert "COSC241" not in planned  # its prerequisite is not planned
+        stub = next(u for u in plan.unscheduled if u.course.code == "MATH141")
+        assert "Confirm it with an advisor" in stub.reason
+        assert "COSC354" in stub.reason
+        blocked = next(u for u in plan.unscheduled if u.course.code == "COSC354")
+        assert "COSC241" in blocked.reason
 
     def test_plans_are_marked_verified(self, morgan: Program) -> None:
         plan = generate_schedule(morgan, record(), start_term="Fall 2026")

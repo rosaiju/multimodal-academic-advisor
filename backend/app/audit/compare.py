@@ -19,6 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.audit.planning import blocks_needing_retake
 from app.audit.prereq_graph import passed_courses, remaining_depth, unlocks, unmet_prerequisites
 from app.audit.record import StudentRecord
 from app.catalog.schema import IN_PROGRESS_GRADES, Program
@@ -54,6 +55,9 @@ class CourseFacts(BaseModel):
     offered_as_needed: bool
     #: True when the catalog says nothing about which terms the course runs.
     terms_assumed: bool
+    #: Passed for credit, but below the minimum grade of a requirement that lists
+    #: it - so it must be taken again. `state` stays "passed" (credit was earned).
+    retake_needed: bool = False
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -96,6 +100,13 @@ def _facts(
             serves.append(ServedRequirement(block_id=block.id, name=block.name, still_open=open_))
 
     missing = unmet_prerequisites(program, code, passed)
+    applied = {a.course.code for b in audit.blocks for a in b.applied}
+    retake_for: list[str] = []
+    if code in passed and code not in applied and code not in in_progress:
+        open_names = {s.name for s in serves if s.still_open}
+        retake_for = [
+            n for n in blocks_needing_retake(program, code, passed[code]) if n in open_names
+        ]
     if code in passed:
         state: CourseState = "passed"
     elif code in in_progress:
@@ -106,6 +117,11 @@ def _facts(
         state = "eligible_now"
 
     warnings: list[str] = []
+    if retake_for:
+        warnings.append(
+            f"Your {passed[code]} is below the minimum grade for {', '.join(retake_for)}, "
+            "so this needs to be taken again."
+        )
     if course.offered_as_needed:
         warnings.append("Offered irregularly. Confirm it runs before relying on it.")
     if course.title.upper().startswith("UNVERIFIED"):
@@ -119,14 +135,15 @@ def _facts(
         state=state,
         missing_prerequisites=missing if state == "blocked" else [],
         serves=serves,
-        advances_open_requirement=state not in ("passed", "in_progress")
-        and any(s.still_open for s in serves),
+        advances_open_requirement=bool(retake_for)
+        or (state not in ("passed", "in_progress") and any(s.still_open for s in serves)),
         unlocks=unlocks(program, code),
         remaining_chain=remaining_depth(program, code, passed),
         terms_offered=[t.value for t in course.terms_offered],
         offered_as_needed=course.offered_as_needed,
         terms_assumed="terms_offered" not in course.model_fields_set,
         warnings=warnings,
+        retake_needed=bool(retake_for),
     )
 
 
@@ -144,7 +161,9 @@ def _differences(facts: list[CourseFacts]) -> list[str]:
         for f in blocked:
             out.append(f"{f.code} needs {', '.join(f.missing_prerequisites)} first.")
     for f in facts:
-        if f.state == "passed":
+        if f.state == "passed" and f.retake_needed:
+            out.append(f"You passed {f.code}, but below a requirement's minimum grade - retake it.")
+        elif f.state == "passed":
             out.append(f"You've already passed {f.code}.")
         elif f.state == "in_progress":
             out.append(f"You're taking {f.code} now.")
@@ -155,6 +174,7 @@ def _differences(facts: list[CourseFacts]) -> list[str]:
         for f in facts
         if not f.advances_open_requirement and f.state not in ("passed", "in_progress")
     ]
+    counts = [c for c in counts if c not in {f.code for f in facts if f.retake_needed}]
     if counts and nothing:
         out.append(
             f"{_join(counts)} would advance a requirement you still need. "
@@ -167,7 +187,11 @@ def _differences(facts: list[CourseFacts]) -> list[str]:
         winners = [c for c, n in unlock_counts.items() if n == top]
         out.append(f"{_join(winners)} unlocks the most later courses ({top}).")
 
-    chains = {f.code: f.remaining_chain for f in facts if f.state not in ("passed", "in_progress")}
+    chains = {
+        f.code: f.remaining_chain
+        for f in facts
+        if f.state not in ("passed", "in_progress") or f.retake_needed
+    }
     if len(set(chains.values())) > 1:
         longest = max(chains.values())
         out.append(

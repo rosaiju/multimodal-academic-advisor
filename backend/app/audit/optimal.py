@@ -46,7 +46,7 @@ _GRADE_RANK = {"A": 0, "B": 1, "C": 2, "D": 3}
 
 
 def representative_indices(pool: list[CompletedCourse]) -> dict[str, int]:
-    """One pool position per course code - the best passing grade for it.
+    """One pool position per course code - the best trusted passing grade for it.
 
     Collapsing retakes before matching is what stops a course taken twice from
     filling two different requirement slots. Two entries for COSC350 are still one
@@ -54,6 +54,10 @@ def representative_indices(pool: list[CompletedCourse]) -> dict[str, int]:
     """
     best: dict[str, int] = {}
     for i, taken in enumerate(pool):
+        if not taken.is_trusted:
+            # An unconfirmed row must not become the representative: it would then
+            # be filtered out as untrusted and take the confirmed attempt with it.
+            continue
         rank = _GRADE_RANK.get(taken.grade.strip().upper().rstrip("+-"))
         if rank is None:
             continue

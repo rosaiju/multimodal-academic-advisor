@@ -42,6 +42,26 @@ class Settings(BaseSettings):
     #: that says the model timed out.
     ollama_timeout_seconds: float = 60.0
 
+    #: How the advisor decides WHICH engine answer a question gets.
+    #: "model": the configured chat model reads the question and the recent
+    #: conversation and returns a route as strict JSON (app/advisor/understanding.py),
+    #: falling back to keywords on any failure. "keywords": keyword routing only.
+    #: Either way every answer is written by the engine; the model only picks one.
+    advisor_understanding: Literal["model", "keywords"] = "model"
+    #: Seconds. Routing is a short JSON reply; past this, keywords decide.
+    advisor_understanding_timeout_seconds: float = 45.0
+    #: Optional smaller/faster Ollama model just for routing (e.g. llama3.2:3b).
+    #: Empty means the chat model is used.
+    ollama_understanding_model: str = ""
+
+    # --- Vision (scanned transcript reading) ---
+    #: Empty keeps the original behaviour (follow LLM_PROVIDER: anthropic, else openai).
+    #: "ollama" reads images with a local vision model - no key, slow on a CPU.
+    vision_provider: Literal["", "anthropic", "openai", "ollama"] = ""
+    ollama_vision_model: str = "qwen2.5vl:3b"
+    #: Seconds. A 3B vision model on a laptop CPU takes minutes per page.
+    ollama_vision_timeout_seconds: float = 600.0
+
     #: Turns of conversation kept per session. Bounded so a long chat cannot grow
     #: the prompt without limit.
     advisor_history_turns: int = 12

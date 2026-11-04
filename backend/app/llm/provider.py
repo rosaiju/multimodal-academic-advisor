@@ -146,11 +146,85 @@ class OpenAIVisionProvider:
         return response.choices[0].message.content or ""
 
 
+class OllamaVisionProvider:
+    """A local vision model through Ollama (e.g. qwen2.5vl:3b). No key, no egress.
+
+    Images only: Ollama does not take PDFs, so `supports_pdf` is False and the
+    extractor does not offer PDFs to it. Output is requested as JSON
+    (`format: "json"`) at temperature 0. Like every vision reader, what comes back
+    is UNVERIFIED and goes through the student's review screen.
+    """
+
+    supports_pdf = False
+
+    def __init__(self, base_url: str, model: str, timeout: float = 600.0) -> None:
+        self.name = model
+        self._base = base_url.rstrip("/")
+        self._model = model
+        self._timeout = timeout
+
+    def read_document(
+        self,
+        data: bytes,
+        *,
+        media_type: str,
+        prompt: str,
+        max_tokens: int = 4096,
+    ) -> str:
+        if media_type == "application/pdf":
+            raise ProviderError(
+                "the local vision model reads images, not PDFs. Upload a photo or "
+                "screenshot of the transcript, or a plain-text transcript."
+            )
+        import base64
+
+        # Imported here: app.llm.chat imports ProviderError from this module.
+        from app.llm.chat import _http_json
+
+        payload = {
+            "model": self._model,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0, "num_predict": max_tokens},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                    "images": [base64.standard_b64encode(data).decode("ascii")],
+                }
+            ],
+        }
+        reply = _http_json(f"{self._base}/api/chat", payload, timeout=self._timeout)
+        message = reply.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            raise ProviderError("the local vision model returned nothing")
+        return content
+
+
 def get_vision_provider(settings: Settings | None = None) -> VisionProvider:
-    """Build the configured provider, or raise saying exactly what is missing."""
+    """Build the configured provider, or raise saying exactly what is missing.
+
+    VISION_PROVIDER picks one explicitly; empty keeps the original rule (follow
+    LLM_PROVIDER: anthropic, otherwise openai).
+    """
     settings = settings or get_settings()
 
-    if settings.llm_provider == "anthropic":
+    if settings.vision_provider == "ollama":
+        return OllamaVisionProvider(
+            settings.ollama_base_url,
+            settings.ollama_vision_model,
+            settings.ollama_vision_timeout_seconds,
+        )
+    if settings.vision_provider == "openai":
+        if not settings.openai_api_key:
+            raise ProviderError(
+                "OPENAI_API_KEY is not set, so scanned transcripts cannot be read. "
+                "Plain-text transcripts still work without it."
+            )
+        return OpenAIVisionProvider(settings.openai_api_key, settings.openai_vision_model)
+
+    if settings.vision_provider == "anthropic" or settings.llm_provider == "anthropic":
         if not settings.anthropic_api_key:
             raise ProviderError(
                 "ANTHROPIC_API_KEY is not set, so scanned transcripts cannot be read. "

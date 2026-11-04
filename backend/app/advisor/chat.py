@@ -24,12 +24,20 @@ import logging
 import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.advisor.answers import GroundedAnswer, Intent, deterministic_answer
 from app.advisor.consistency import allowed_codes, check_rephrasing, invented_codes
 from app.advisor.facts import AdvisorFacts, render_facts
-from app.llm.chat import ChatProvider, ChatTurn, ProviderUnavailable, get_chat_provider
+from app.advisor.understanding import understand
+from app.config import get_settings
+from app.llm.chat import (
+    ChatProvider,
+    ChatTurn,
+    ProviderUnavailable,
+    get_chat_provider,
+    get_understanding_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +164,10 @@ class AdvisorReply:
     #: A model reply that failed the consistency check. Never shown to the student
     #: and not returned by the API; kept for logs and the live smoke test.
     discarded: str | None = None
+    #: Which path chose the route to the engine answer: "model" when a language
+    #: model read the question (and recent turns) and picked one of the engine's
+    #: answers, "keywords" otherwise. It never means the model wrote the answer.
+    understood_by: str = "keywords"
 
 
 def _known_codes(facts: AdvisorFacts) -> set[str]:
@@ -198,13 +210,52 @@ def ask(
     provider: ChatProvider | None = None,
     history_turns: int = 12,
     use_llm: bool = True,
+    understanding_provider: ChatProvider | None = None,
+    understanding: str | None = None,
 ) -> AdvisorReply:
-    """Answer one question. Never raises for a provider problem."""
+    """Answer one question. Never raises for a provider problem.
+
+    Routing: if a model is configured for understanding (ADVISOR_UNDERSTANDING=
+    model, the default, and a reachable provider), it picks which engine answer
+    the question wants, using the recent conversation. Otherwise keywords do. A
+    caller that injects `provider` gets keyword routing unless it also injects
+    `understanding_provider`, so a stub provider never receives routing calls it
+    did not ask for.
+    """
     question = question.strip()
-    prepared: GroundedAnswer = deterministic_answer(facts, question)
     conversation = conversations.get(student_id, conversation_id)
 
+    route_intent: Intent | None = None
+    route_codes: list[str] | None = None
+    understood_by = "keywords"
+    if use_llm and facts is not None and facts.has_coursework:
+        router = understanding_provider
+        if router is None and provider is None:
+            mode = understanding or get_settings().advisor_understanding
+            router = get_understanding_provider() if mode == "model" else None
+        if router is not None and router.available()[0]:
+            catalog = frozenset(
+                c.code.replace(" ", "").upper()
+                for c in (facts.program.courses if facts.program else [])
+            )
+            understood = understand(
+                question, list(conversation.turns), provider=router, catalog_codes=catalog
+            )
+            if understood.source == "model":
+                route_intent, route_codes = understood.intent, understood.codes or None
+                understood_by = "model"
+                logger.info(
+                    "model routed question to %s (codes=%s, follow_up_of=%s) in %ss",
+                    understood.intent,
+                    understood.codes,
+                    understood.follow_up_of,
+                    understood.seconds,
+                )
+
+    prepared: GroundedAnswer = deterministic_answer(facts, question, route_intent, route_codes)
+
     def finish(reply: AdvisorReply) -> AdvisorReply:
+        reply = replace(reply, understood_by=understood_by)
         conversation.add("user", question, keep=history_turns)
         conversation.add("assistant", reply.answer, keep=history_turns)
         return reply
@@ -236,7 +287,8 @@ def ask(
 
     # Nothing to rephrase against: with no record, the deterministic text already
     # says the right thing and a model could only pad it.
-    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD:
+    # A crisis reply is fixed text: no model rewrites it.
+    if not use_llm or facts is None or prepared.intent in (Intent.NO_RECORD, Intent.CRISIS):
         return finish(base)
 
     provider = provider or get_chat_provider()

@@ -72,6 +72,9 @@ class ChatResponse(BaseModel):
     model: str | None = None
     notice: str | None = None
     conversation_id: str
+    #: "model" when a language model chose which engine answer this question
+    #: gets, "keywords" when keyword routing did. The answer is the engine's either way.
+    understood_by: str = "keywords"
 
 
 class AdvisorHealth(BaseModel):
@@ -175,6 +178,7 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         model=reply.model,
         notice=reply.notice,
         conversation_id=body.conversation_id,
+        understood_by=reply.understood_by,
     )
 
 

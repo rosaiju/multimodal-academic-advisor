@@ -73,3 +73,24 @@ records are JSON files under `backend/accounts` and `backend/student_records`.
 
 Open item handed to the AI agent: `test_dropped_second_prerequisite` no longer exercises its
 original scenario after the new prerequisites changed the engine's "not yet eligible" list.
+
+## Step 4 — AI merge, live verification, fixes (lead)
+
+- agent/ai merged as `0c1f378`: 1256 backend tests pass.
+- Live check (qwen2.5:7b, real HTTP app) found a model reply that turned two required
+  courses into "either COSC459 or COSC490" and passed the check. Fixed in `4805f9f`
+  (engine says "All of these are needed"; check rejects choice wording). 1260 tests.
+- Added `ADVISOR_REPHRASE=false` (`3955ce7`): routing by the model in 6–14 s instead of
+  50–125 s per answer with rephrasing. 1262 tests.
+- Vision live through the API: 7/7 rows correct, 88 s cold; in the browser 35 s warm.
+- Browser, AI mode on: image upload → confirm → three questions, routing labels correct.
+- Clean start with `scripts/start-demo.ps1` on ports 8000/5173; 12-step walkthrough passes.
+  The walkthrough's throwaway account was deleted by exact filename afterwards.
+
+## Final state
+
+- Branch `integration/nov5-demo`, local only. Final docs: `docs/FINAL_IMPLEMENTATION_REPORT.md`,
+  `docs/FINAL_DEMO_GUIDE.md`, `docs/KNOWN_ISSUES.md`.
+- Backend 1262 passed; frontend 26 passed; ruff, black, oxlint, build, doctor clean.
+- Not done: Gemini (no key), voice re-test with a microphone, push/PR (needs approval).
+- Demo servers were left running from `scripts/start-demo.ps1` (two PowerShell windows).

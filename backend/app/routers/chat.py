@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.advisor.chat import AdvisorReply, ask, conversations
@@ -29,6 +29,9 @@ from app.speech.clarify import subjects_in, suggest_clarifications
 from app.speech.course_codes import normalize_course_mentions
 from app.speech.keyterms import spoken_course_codes
 from app.speech.registry import transcribe
+from app.speech.speakable import to_speech
+from app.speech.tts import synthesize
+from app.advisor.links import Link
 
 router = APIRouter(prefix="/advisor", tags=["advisor"])
 
@@ -235,3 +238,33 @@ def transcribe_question(
         confidence=result.confidence,
         clarifications=[Clarification(**q.as_dict()) for q in questions] or None,
     )
+
+
+#: Longer than any advisor answer; a cap so one request can't run up the TTS bill.
+SPEAK_MAX_CHARS = 2000
+
+
+class LinkModel(BaseModel):
+    name: str = Field(max_length=200)
+    url: str = Field(max_length=500)
+
+
+class SpeakRequest(BaseModel):
+    text: str
+    links: list[LinkModel] = []
+
+
+@router.post("/speak", response_class=Response)
+def speak(user: CurrentUser, body: SpeakRequest) -> Response:
+    """Speak an advisor answer aloud (mp3). The text is reformatted for speech by
+    deterministic code only - no model sees it here."""
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="nothing to say")
+    if len(body.text) > SPEAK_MAX_CHARS:
+        raise HTTPException(status_code=413, detail="text too long to speak")
+    links = [Link(link.name, link.url) for link in body.links]
+    try:
+        audio = synthesize(to_speech(body.text, links))
+    except SpeechError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(content=audio, media_type="audio/mpeg")

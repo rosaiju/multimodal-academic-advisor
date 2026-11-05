@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     #: it never changes how an answer is computed.
     deepgram_api_key: str = ""
     deepgram_model: str = "nova-3"
+    #: Aura voice used to speak advisor answers (POST /advisor/speak).
+    deepgram_tts_model: str = "aura-2-thalia-en"
     #: Overridden by tests to point at a loopback fake.
     deepgram_base_url: str = "https://api.deepgram.com"
     #: Seconds. A spoken question is a few seconds of audio; a request still

@@ -1,0 +1,225 @@
+import { act, renderHook } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useVoiceConversation } from './useVoiceConversation'
+import { askAdvisor } from '../api'
+import { useLiveTranscription } from './useLiveTranscription'
+import { useSpeaker } from './useSpeaker'
+
+vi.mock('../api', () => ({ askAdvisor: vi.fn() }))
+vi.mock('./useLiveTranscription', () => ({ useLiveTranscription: vi.fn() }))
+vi.mock('./useSpeaker', () => ({ useSpeaker: vi.fn() }))
+
+let live, speaker, finishSpeaking
+
+function reply(answer, extra = {}) {
+  return { answer, source: 'engine', grounded: true, citations: [], links: [], ...extra }
+}
+
+beforeEach(() => {
+  askAdvisor.mockReset()
+  live = { supported: true, listening: false, liveText: '', error: null, start: vi.fn(), stop: vi.fn() }
+  useLiveTranscription.mockImplementation((opts) => {
+    live.onDone = opts.onDone
+    live.onFail = opts.onFail
+    return live
+  })
+  speaker = {
+    speaking: false,
+    error: null,
+    stop: vi.fn(() => finishSpeaking?.()),
+    speak: vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishSpeaking = resolve
+        }),
+    ),
+  }
+  useSpeaker.mockImplementation(() => speaker)
+})
+
+async function say(text, confidence = 0.95) {
+  await act(async () => {
+    live.onDone({ text, confidence })
+  })
+}
+
+async function endSpeech() {
+  await act(async () => {
+    finishSpeaking()
+  })
+}
+
+describe('useVoiceConversation', () => {
+  it('push-to-talk: one turn goes listening -> thinking -> speaking -> idle', async () => {
+    askAdvisor.mockResolvedValue(reply('You have 7 courses left.'))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
+    act(() => result.current.start())
+    expect(result.current.state).toBe('listening')
+    expect(live.start).toHaveBeenCalledTimes(1)
+    await say('what do I have left')
+    expect(askAdvisor).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'what do I have left', mode: 'live', confidence: 0.95 }),
+    )
+    expect(result.current.state).toBe('speaking')
+    expect(speaker.speak).toHaveBeenCalledWith('You have 7 courses left.', [], expect.objectContaining({ brief: true }))
+    await endSpeech()
+    expect(result.current.state).toBe('idle')
+    expect(result.current.turns.map((t) => t.role)).toEqual(['user', 'advisor'])
+  })
+
+  it('a model summary is spoken as-is, not cut down again', async () => {
+    askAdvisor.mockResolvedValue(reply('You have 7 left.', { source: 'engine+llm' }))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    expect(speaker.speak).toHaveBeenCalledWith('You have 7 left.', [], expect.objectContaining({ brief: false }))
+  })
+
+  it('"list them all" is read in full, not cut down', async () => {
+    askAdvisor.mockResolvedValue(reply('All 5 blocks...', { read_in_full: true }))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
+    act(() => result.current.start())
+    await say('could you list out the full list')
+    expect(speaker.speak).toHaveBeenCalledWith(
+      'All 5 blocks...',
+      [],
+      expect.objectContaining({ brief: false }),
+    )
+  })
+
+  it('hands-free returns to listening after speaking', async () => {
+    askAdvisor.mockResolvedValue(reply('ok'))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('hi there')
+    await endSpeech()
+    expect(result.current.state).toBe('listening')
+  })
+
+  it('an empty utterance asks nothing and keeps listening', async () => {
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('   ', 0)
+    expect(askAdvisor).not.toHaveBeenCalled()
+    expect(result.current.state).toBe('listening')
+    expect(live.start).toHaveBeenCalledTimes(2)
+  })
+
+  it('a speech failure still shows the text and goes back to listening', async () => {
+    askAdvisor.mockResolvedValue(reply('ok'))
+    speaker.speak = vi.fn(() => Promise.resolve())
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('hi there')
+    expect(result.current.turns.at(-1).reply.answer).toBe('ok')
+    expect(result.current.state).toBe('listening')
+  })
+
+  it('"yeah" after a read-back re-asks the original question with the confirmed code', async () => {
+    askAdvisor.mockResolvedValueOnce(
+      reply('Did you mean COSC 241?', {
+        source: 'readback',
+        clarification: { spoken: 'COSC 241', candidates: ['COSC 241'], question: 'Did you mean COSC 241?' },
+      }),
+    )
+    askAdvisor.mockResolvedValueOnce(reply('For COSC 241: you can take it.'))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('can I take COSC 241', 0.4)
+    await endSpeech()
+    await say('yeah', 0.9)
+    expect(askAdvisor).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: 'can I take COSC 241', confidence: 1 }),
+    )
+  })
+
+  it('barge-in: real words while speaking stop playback and listen', async () => {
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result, rerender } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    expect(result.current.state).toBe('speaking')
+    live.liveText = 'wait'
+    await act(async () => rerender())
+    expect(speaker.stop).toHaveBeenCalled()
+    expect(result.current.state).toBe('listening')
+  })
+
+  it('a stray sound while speaking does not interrupt', async () => {
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result, rerender } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    live.liveText = 'a'
+    await act(async () => rerender())
+    expect(speaker.stop).not.toHaveBeenCalled()
+    expect(result.current.state).toBe('speaking')
+  })
+
+  it('a stale reply arriving after the session ends is dropped', async () => {
+    let answer
+    askAdvisor.mockReturnValue(new Promise((r) => (answer = r)))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    act(() => result.current.end())
+    await act(async () => answer(reply('late')))
+    expect(speaker.speak).not.toHaveBeenCalled()
+    expect(result.current.turns.map((t) => t.role)).toEqual(['user'])
+    expect(result.current.state).toBe('idle')
+  })
+
+  it('a listening session that fails goes idle instead of hanging', async () => {
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await act(async () => live.onFail('Voice input is not available'))
+    expect(result.current.state).toBe('idle')
+    expect(live.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('a stray sound heard during playback is not asked as a question', async () => {
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    await say('a', 0.3)
+    expect(askAdvisor).toHaveBeenCalledTimes(1)
+    expect(result.current.state).toBe('speaking')
+  })
+
+  it('keeps listening for barge-in when a session ends empty mid-playback', async () => {
+    // The server ends a session that hears nothing for 8 s; long replies outlast it.
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result, rerender } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    const before = live.start.mock.calls.length
+    await say('', 0)
+    expect(live.start).toHaveBeenCalledTimes(before + 1)
+    await say('a', 0.3) // a stray sound ending a session also re-opens one
+    expect(live.start).toHaveBeenCalledTimes(before + 2)
+    live.liveText = 'wait'
+    await act(async () => rerender())
+    expect(speaker.stop).toHaveBeenCalled()
+    expect(result.current.state).toBe('listening')
+  })
+
+  it('the question after a barge-in tells the server the reply was interrupted', async () => {
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result, rerender } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    expect(askAdvisor).toHaveBeenLastCalledWith(expect.objectContaining({ interrupted: false }))
+    live.liveText = 'wait what about summer'
+    await act(async () => rerender())
+    await say('wait what about summer')
+    expect(askAdvisor).toHaveBeenLastCalledWith(expect.objectContaining({ interrupted: true }))
+    await say('ok and next semester')
+    expect(askAdvisor).toHaveBeenLastCalledWith(expect.objectContaining({ interrupted: false }))
+  })
+
+  it('asks the listener for live (short-pause) sessions', () => {
+    renderHook(() => useVoiceConversation({ handsFree: true }))
+    expect(useLiveTranscription).toHaveBeenCalledWith(expect.objectContaining({ live: true }))
+  })
+})

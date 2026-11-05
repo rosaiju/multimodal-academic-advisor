@@ -229,3 +229,31 @@ class TestSession:
         while not fake.closed and time.monotonic() < deadline:
             time.sleep(0.02)
         assert fake.closed
+
+
+class TestLivePause:
+    """Live voice ends a turn on a shorter pause than dictation."""
+
+    def _pause_used(self, client, monkeypatch, start_extra: dict) -> int:
+        fake = use(monkeypatch, ScriptedLive([Final("hi", 0.9), UtteranceEnd()]))
+        seen: list[int] = []
+        original = fake.connect
+
+        async def connect(keyterms=(), *, settings=None):
+            seen.append(settings.speech_pause_ms)
+            await original(keyterms, settings=settings)
+
+        fake.connect = connect
+        with client.websocket_connect("/advisor/listen") as ws:
+            ws.send_json({"type": "start", "token": token_of(client), **start_extra})
+            while ws.receive_json()["type"] not in ("done", "error"):
+                pass
+        return seen[0]
+
+    def test_dictation_keeps_the_long_pause(self, client, voice_on, monkeypatch) -> None:
+        assert self._pause_used(client, monkeypatch, {}) == get_settings().speech_pause_ms
+
+    def test_live_uses_the_live_pause(self, client, voice_on, monkeypatch) -> None:
+        live = self._pause_used(client, monkeypatch, {"live": True})
+        assert live == get_settings().live_pause_ms
+        assert 1000 <= live < get_settings().speech_pause_ms

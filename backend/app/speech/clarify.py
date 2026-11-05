@@ -127,3 +127,46 @@ def suggest_clarifications(
         shown = tuple(f"{subject} {num}" for subject, num in pairs)
         out.append(Clarification(text[match.start() : end], shown, _question(shown)))
     return out
+
+
+#: Below this, a live turn naming a course is read back before it is answered.
+#: Same value as the dictation box's low-confidence warning.
+READBACK_CONFIDENCE = 0.6
+
+_NAMED_CODE = re.compile(r"\b([A-Z]{3,4}) ?(\d{3})\b")
+
+
+def named_courses(text: str) -> list[str]:
+    """Course codes written out in `text`, "COSC 241" form, in order, deduplicated."""
+    return list(dict.fromkeys(f"{m[1]} {m[2]}" for m in _NAMED_CODE.finditer(text)))
+
+
+def readback_question(
+    text: str,
+    confidence: float,
+    catalog_codes: Iterable[str],
+    context_subjects: Sequence[str] = (),
+) -> Clarification | None:
+    """For a live voice turn: the question to ask back instead of answering, if any.
+
+    Asks when a named code is not in the catalog, when the transcript is
+    low-confidence and names a course, or when a bare number matches a course.
+    """
+    known = {c.upper().replace(" ", "") for c in catalog_codes}
+    named = named_courses(text)
+    for code in named:
+        if code.replace(" ", "") not in known:
+            return Clarification(
+                spoken=code,
+                candidates=(),
+                question=(
+                    f"I heard {code}, but that course isn't in the catalog. "
+                    "Which course did you mean?"
+                ),
+            )
+    if named and confidence < READBACK_CONFIDENCE:
+        return Clarification(
+            spoken=named[0], candidates=(named[0],), question=f"Did you mean {named[0]}?"
+        )
+    bare = suggest_clarifications(text, known, context_subjects)
+    return bare[0] if bare else None

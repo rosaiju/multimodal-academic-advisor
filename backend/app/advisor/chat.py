@@ -24,12 +24,14 @@ import logging
 import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from app.advisor.answers import GroundedAnswer, Intent, deterministic_answer
+from app.advisor.answers import GroundedAnswer, Intent, detect_intent, deterministic_answer
 from app.advisor.consistency import allowed_codes, check_rephrasing, invented_codes
 from app.advisor.facts import AdvisorFacts, render_facts
+from app.advisor.links import Link, links_for
 from app.llm.chat import ChatProvider, ChatTurn, ProviderUnavailable, get_chat_provider
+from app.speech.speakable import brief_text
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,49 @@ A deterministic answer to the student's question has already been prepared:
 Rephrase the prepared answer in a natural, friendly advising voice. Keep every
 fact, number and course code exactly as given, each with the same meaning - a
 percentage of progress stays a percentage of progress. You may reorder and reword. You
-may not add academic claims that are not in the facts block."""
+may not add academic claims that are not in the facts block.
+
+Format the answer in Markdown for a chat window: short paragraphs, a "-" bullet
+list when naming several courses or requirements, and **bold** for the main
+takeaway. No headings, tables or code blocks."""
+
+#: Live voice: the same facts and prepared answer, but the model SUMMARIZES for
+#: speech. Checked with check_rephrasing(brief=True): it may leave details out,
+#: never distort them, and every caveat, blocker and refusal must survive.
+LIVE_PROMPT = (
+    SYSTEM_PROMPT.rsplit("Rephrase the prepared answer", 1)[0]
+    + """This answer will be SPOKEN ALOUD to the student, so it must be short.
+
+Answer the student's immediate question in a natural, friendly advising voice.
+Start with the main takeaway and, when supported, the next action. Default to two
+or three short sentences.
+
+Summarize rather than reading the full prepared answer. You may omit supporting
+details that are unnecessary to answer the question, but preserve every caveat,
+limitation, and refusal in the prepared answer. Never omit information that would
+change the student's registration decision or misrepresent a course's status.
+
+For every fact you include, preserve its meaning and reproduce numbers and course
+codes exactly. Use only the verified facts. If the necessary caveats require a
+longer answer, prioritize accuracy over brevity. No lists, headings or markdown.
+
+The student can see the full prepared answer on their screen while you speak. Name
+at most three courses or requirements; for the rest, say they are on the screen
+instead of reading them out."""
+)
+
+
+#: "Could you list out the full list?" / "list them all": a follow-up asking for
+#: everything the last answer had. It names no topic, so it reuses the last one.
+_LIST_ALL = re.compile(
+    r"\b(full|whole|entire|complete) list\b"
+    r"|\blist (them|it|those|these|everything|all)\b"
+    r"|\ball of (them|those|these)\b"
+    r"|\b(read|tell|say|name|give) (me )?(them|those|these|everything) all\b"
+)
+
+#: Prefixed to a spoken reply the student talked over.
+INTERRUPTED_NOTE = "[The student interrupted this reply, so they may not have heard all of it.]"
 
 
 @dataclass
@@ -84,6 +128,8 @@ class Conversation:
 
     turns: list[ChatTurn] = field(default_factory=list)
     updated_at: float = field(default_factory=time.time)
+    #: The last question the engine could answer, for "list them all".
+    last_question: str | None = None
 
     def add(self, role: str, content: str, *, keep: int) -> None:
         self.turns.append(ChatTurn(role=role, content=content))  # type: ignore[arg-type]
@@ -107,6 +153,21 @@ class ConversationStore:
         """What was said lately, without creating a conversation to find out."""
         found = self._data.get((student_id, conversation_id))
         return " ".join(turn.content for turn in found.turns) if found else ""
+
+    def mark_interrupted(self, student_id: str, conversation_id: str) -> None:
+        """The student talked over the last spoken reply: say so in history, so
+        the model does not assume they heard all of it. Idempotent."""
+        found = self._data.get((student_id, conversation_id))
+        if not found:
+            return
+        for i in range(len(found.turns) - 1, -1, -1):
+            turn = found.turns[i]
+            if turn.role == "assistant":
+                if not turn.content.startswith(INTERRUPTED_NOTE):
+                    found.turns[i] = ChatTurn(
+                        role="assistant", content=f"{INTERRUPTED_NOTE} {turn.content}"
+                    )
+                return
 
     def get(self, student_id: str, conversation_id: str) -> Conversation:
         key = (student_id, conversation_id)
@@ -156,6 +217,11 @@ class AdvisorReply:
     #: A model reply that failed the consistency check. Never shown to the student
     #: and not returned by the API; kept for logs and the live smoke test.
     discarded: str | None = None
+    #: Curated links (app/advisor/links.py) for answers the advisor cannot give.
+    links: list[Link] = field(default_factory=list)
+    #: Live voice: the student asked for everything, so speak the whole answer
+    #: instead of the brief cut.
+    read_in_full: bool = False
 
 
 def _known_codes(facts: AdvisorFacts) -> set[str]:
@@ -198,15 +264,37 @@ def ask(
     provider: ChatProvider | None = None,
     history_turns: int = 12,
     use_llm: bool = True,
+    live: bool = False,
 ) -> AdvisorReply:
     """Answer one question. Never raises for a provider problem."""
     question = question.strip()
-    prepared: GroundedAnswer = deterministic_answer(facts, question)
     conversation = conversations.get(student_id, conversation_id)
+    # "List them all" names no topic: answer the last question again, in full.
+    asked = question
+    read_in_full = False
+    if (
+        conversation.last_question
+        and detect_intent(question) is Intent.UNKNOWN
+        and _LIST_ALL.search(question.lower())
+    ):
+        asked = conversation.last_question
+        read_in_full = live
+    prepared: GroundedAnswer = deterministic_answer(facts, asked)
 
     def finish(reply: AdvisorReply) -> AdvisorReply:
+        # Links attach here, by intent, on every path - so a rephrased reply
+        # carries the same curated links and never a model-supplied one.
+        reply = replace(reply, links=links_for(reply.intent), read_in_full=read_in_full)
+        if prepared.intent not in (Intent.UNKNOWN, Intent.NO_RECORD):
+            conversation.last_question = asked
         conversation.add("user", question, keep=history_turns)
-        conversation.add("assistant", reply.answer, keep=history_turns)
+        # Live voice: remember what was SPOKEN. An engine answer is cut down for
+        # speech (speakable.brief_text) unless the student asked for all of it;
+        # a model summary is spoken as written.
+        heard = reply.answer
+        if live and reply.source != "engine+llm" and not read_in_full:
+            heard = brief_text(reply.answer)
+        conversation.add("assistant", heard, keep=history_turns)
         return reply
 
     base = AdvisorReply(
@@ -236,7 +324,8 @@ def ask(
 
     # Nothing to rephrase against: with no record, the deterministic text already
     # says the right thing and a model could only pad it.
-    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD:
+    # Asked aloud for everything: the engine's whole answer, not another summary.
+    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD or read_in_full:
         return finish(base)
 
     provider = provider or get_chat_provider()
@@ -250,7 +339,7 @@ def ask(
             )
         )
 
-    system = SYSTEM_PROMPT.format(
+    system = (LIVE_PROMPT if live else SYSTEM_PROMPT).format(
         institution=facts.institution or "the university",
         program=facts.program_name,
         facts=render_facts(facts),
@@ -266,8 +355,7 @@ def ask(
         logger.info("chat provider unavailable, serving deterministic answer: %s", exc)
         return finish(
             engine_answer(
-                f"Answered from the degree engine. The language model could not "
-                f"be reached ({exc})."
+                f"Answered from the degree engine. The language model could not be reached ({exc})."
             )
         )
     except Exception:  # noqa: BLE001 - a provider bug must not become a 500
@@ -280,7 +368,7 @@ def ask(
         )
 
     text = _strip_reasoning(raw) if isinstance(raw, str) else ""
-    problems = check_rephrasing(prepared, text, facts, question=question)
+    problems = check_rephrasing(prepared, text, facts, question=asked, brief=live)
     if problems:
         logger.warning("discarding model answer: %s", "; ".join(problems))
         return finish(

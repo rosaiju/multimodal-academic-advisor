@@ -23,7 +23,7 @@ const CHUNK_MS = 250
  * - Tracks are released on every ending, including unmount, so the browser's
  *   recording indicator always goes away.
  */
-export function useLiveTranscription({ onDone }) {
+export function useLiveTranscription({ onDone, onFail, live = false }) {
   const supported =
     typeof window !== 'undefined' &&
     typeof window.MediaRecorder !== 'undefined' &&
@@ -40,10 +40,12 @@ export function useLiveTranscription({ onDone }) {
   const startingRef = useRef(false)
   const mountedRef = useRef(true)
   const onDoneRef = useRef(onDone)
+  const onFailRef = useRef(onFail)
 
   useEffect(() => {
     onDoneRef.current = onDone
-  }, [onDone])
+    onFailRef.current = onFail
+  }, [onDone, onFail])
 
   const release = useCallback(() => {
     const recorder = recorderRef.current
@@ -81,6 +83,8 @@ export function useLiveTranscription({ onDone }) {
       if (message) setError(message)
       if (result) onDoneRef.current?.(result)
       else if (heard) onDoneRef.current?.({ text: heard, confidence: 0 })
+      // Ended by a failure with nothing heard: tell a caller that loops (live mode).
+      else if (message) onFailRef.current?.(message)
     },
     [release],
   )
@@ -107,10 +111,15 @@ export function useLiveTranscription({ onDone }) {
     setError(null)
     let stream
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Echo cancellation keeps the advisor's own voice (from the speakers) out of
+      // the mic - the first defense against it interrupting itself.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
     } catch {
       startingRef.current = false
       setError(MIC_BLOCKED)
+      onFailRef.current?.(MIC_BLOCKED)
       return
     }
     startingRef.current = false
@@ -131,7 +140,8 @@ export function useLiveTranscription({ onDone }) {
     setListening(true)
 
     socket.onopen = () => {
-      socket.send(JSON.stringify({ type: 'start', token: getAccessToken() }))
+      // live: the hands-free conversation, which ends a turn on a shorter pause.
+      socket.send(JSON.stringify({ type: 'start', token: getAccessToken(), live }))
     }
     socket.onmessage = (event) => {
       let message
@@ -157,7 +167,7 @@ export function useLiveTranscription({ onDone }) {
     }
     // Closing without `done` - server restart, network drop, error.
     socket.onclose = () => finish(null, UNAVAILABLE)
-  }, [supported, finish, beginRecording])
+  }, [supported, finish, beginRecording, live])
 
   const stop = useCallback(() => {
     const socket = socketRef.current

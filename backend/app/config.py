@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # --- LLM provider ---
     # Provider-neutral on purpose: the team applies for Anthropic AND OpenAI student
     # credits, then flips this one value to whichever came through.
-    llm_provider: Literal["anthropic", "openai", "gemini", "ollama"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "gemini", "ollama", "openrouter"] = "anthropic"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     openai_vision_model: str = "gpt-4o"
     gemini_chat_model: str = "gemini-2.0-flash"
     gemini_vision_model: str = "gemini-2.0-flash"
+
+    #: OpenRouter: one key, many models (including free ones). OpenAI-compatible.
+    #: Safe with weak models: the model only rephrases, and check_rephrasing
+    #: discards any rewording that changes a fact.
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_chat_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    openrouter_timeout_seconds: float = 45.0
 
     #: Ollama runs locally and needs no key, which makes it the fallback that
     #: works on a laptop with no credits at all. Availability is decided by
@@ -58,6 +66,8 @@ class Settings(BaseSettings):
     #: it never changes how an answer is computed.
     deepgram_api_key: str = ""
     deepgram_model: str = "nova-3"
+    #: Aura voice used to speak advisor answers (POST /advisor/speak).
+    deepgram_tts_model: str = "aura-2-thalia-en"
     #: Overridden by tests to point at a loopback fake.
     deepgram_base_url: str = "https://api.deepgram.com"
     #: Seconds. A spoken question is a few seconds of audio; a request still
@@ -66,6 +76,10 @@ class Settings(BaseSettings):
     #: How long a silence ends a live voice session. Long enough to think mid-question.
     #: Deepgram's minimum is 1000.
     speech_pause_ms: int = 5000
+    #: The same, for the hands-free live voice conversation: long enough for a
+    #: mid-question pause, short enough that the advisor answers promptly.
+    #: Chosen from real-audio tests (see docs/advisor.md, "Live turn-ending").
+    live_pause_ms: int = 2000
     #: About a minute of compressed speech. The client stops at 30 s; this is the
     #: server's own guard, not a policy about question length.
     max_audio_bytes: int = 2 * 1024 * 1024
@@ -154,6 +168,7 @@ class Settings(BaseSettings):
             "openai": self.openai_api_key,
             "gemini": self.gemini_api_key,
             "ollama": "",
+            "openrouter": self.openrouter_api_key,
         }[self.llm_provider]
 
     @property
@@ -163,6 +178,7 @@ class Settings(BaseSettings):
             "openai": self.openai_chat_model,
             "gemini": self.gemini_chat_model,
             "ollama": self.ollama_chat_model,
+            "openrouter": self.openrouter_chat_model,
         }[self.llm_provider]
 
 

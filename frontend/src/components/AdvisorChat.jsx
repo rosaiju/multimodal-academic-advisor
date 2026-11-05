@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { askAdvisor, getAdvisorHealth, resetConversation } from '../api'
+import { useSpeaker } from './useSpeaker'
 import { Alert, Button, Card, Spinner } from './ui'
 import { useLiveTranscription } from './useLiveTranscription'
+import { typingMs, useVoiceConversation } from './useVoiceConversation'
 
 /**
  * The conversational advisor.
@@ -16,6 +19,9 @@ import { useLiveTranscription } from './useLiveTranscription'
  * 2. A missing model is NOT an error state. The backend answers from the engine
  *    either way, so an unavailable provider shows as a quiet note, not a red
  *    banner - the answers are still correct and still worth reading.
+ *
+ * Typed questions, dictation (mic) and the voice conversation (waveform) all
+ * share one composer and one thread, so a spoken turn reads like a typed one.
  */
 
 const CONVERSATION_ID = 'default'
@@ -39,6 +45,8 @@ function mergeDraft(current, spoken) {
 export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [health, setHealth] = useState(null)
   const [messages, setMessages] = useState([])
+  const speaker = useSpeaker()
+  const [speakingIndex, setSpeakingIndex] = useState(null)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -63,8 +71,13 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   }, [])
 
   const voice = useLiveTranscription({ onDone: handleVoiceDone })
+  //: Voice conversation mode: its turns land in this same thread.
+  const live = useVoiceConversation({ conversationId: CONVERSATION_ID, setTurns: setMessages })
+  const liveOn = live.state !== 'idle'
   const voiceOn = Boolean(health?.voice_available)
-  const voiceBusy = voice.listening
+  const canTalk = voiceOn && hasRecord && live.supported
+  const voiceBusy = voice.listening || liveOn
+  const waiting = busy || live.state === 'thinking'
 
   /** Swap the heard words for the code the student chose. Their words, their choice. */
   function applyClarification(offer, candidate) {
@@ -83,6 +96,13 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
     }
   }
 
+  function startLive() {
+    speaker.stop()
+    setVoiceNote(null)
+    setClarifications([])
+    live.start()
+  }
+
   useEffect(() => {
     getAdvisorHealth()
       .then(setHealth)
@@ -93,7 +113,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   useEffect(() => {
     const node = scroller.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [messages, busy])
+  }, [messages, waiting, live.liveText])
 
   async function send(text) {
     const question = (text ?? draft).trim()
@@ -106,7 +126,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
     setBusy(true)
     try {
       const reply = await askAdvisor({ message: question, conversationId: CONVERSATION_ID })
-      setMessages((prev) => [...prev, { role: 'advisor', ...reply }])
+      setMessages((prev) => [...prev, { role: 'advisor', reply, revealMs: typingMs(reply.answer) }])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -115,6 +135,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   }
 
   async function clear() {
+    speaker.stop()
     setMessages([])
     setError(null)
     try {
@@ -133,7 +154,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
         subtitle="Questions about your own degree progress, answered from your confirmed record."
         action={
           messages.length > 0 && (
-            <Button variant="ghost" onClick={clear} disabled={busy}>
+            <Button variant="ghost" onClick={clear} disabled={busy || liveOn}>
               Clear
             </Button>
           )
@@ -170,29 +191,57 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
 
         <div
           ref={scroller}
-          className="max-h-[26rem] space-y-4 overflow-y-auto"
+          className="max-h-[28rem] space-y-4 overflow-y-auto"
           aria-live="polite"
-          aria-busy={busy}
+          aria-busy={waiting}
         >
-          {messages.length === 0 && !busy && (
-            <p className="py-6 text-center text-sm text-slate-500">
-              Ask a question below, or pick one of the suggestions.
-            </p>
+          {messages.length === 0 && !waiting && (
+            <div className="py-6 text-center">
+              <p className="text-sm font-medium text-slate-700">What would you like to know?</p>
+              {suggestions.length > 0 && (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {suggestions.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={() => send(question)}
+                      disabled={busy || voiceBusy}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {messages.map((message, i) =>
             message.role === 'user' ? (
-              <div key={i} className="flex justify-end">
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-slate-900 px-4 py-2.5 text-sm text-white">
-                  {message.text}
-                </p>
-              </div>
+              <UserBubble key={i} text={message.text} />
             ) : (
-              <AdvisorTurn key={i} reply={message} />
+              <AdvisorTurn
+                key={message.id ?? i}
+                reply={message.reply}
+                pending={message.pending}
+                revealMs={message.revealMs}
+                speaking={speaker.speaking && speakingIndex === i}
+                onSpeak={
+                  liveOn
+                    ? undefined
+                    : () => {
+                        if (speaker.speaking && speakingIndex === i) return speaker.stop()
+                        setSpeakingIndex(i)
+                        speaker.speak(message.reply.answer, message.reply.links ?? [])
+                      }
+                }
+              />
             ),
           )}
 
-          {busy && (
+          {live.state === 'listening' && live.liveText && <UserBubble text={live.liveText} draft />}
+
+          {waiting && (
             <div className="flex justify-start">
               <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3">
                 <Spinner label="Checking your record…" />
@@ -209,72 +258,96 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </div>
         )}
 
-        {suggestions.length > 0 && messages.length === 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {suggestions.map((question) => (
-              <button
-                key={question}
-                type="button"
-                onClick={() => send(question)}
-                disabled={busy || voiceBusy}
-                className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-        )}
-
         <form
-          className="mt-4 flex gap-2"
+          className={`mt-4 flex items-center gap-1.5 rounded-2xl border bg-white py-1.5 pl-4 pr-1.5 transition ${
+            liveOn ? 'border-slate-900' : 'border-slate-300 focus-within:border-slate-900'
+          }`}
           onSubmit={(event) => {
             event.preventDefault()
             send()
           }}
         >
-          <label className="sr-only" htmlFor="advisor-question">
-            Your question
-          </label>
-          <input
-            id="advisor-question"
-            ref={input}
-            value={voice.listening ? mergeDraft(draft, voice.liveText) : draft}
-            readOnly={voice.listening}
-            onChange={(event) => {
-              setDraft(event.target.value)
-              setVoiceNote(null)
-            }}
-            placeholder="What should I take next semester?"
-            disabled={busy}
-            maxLength={2000}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
-          />
-          {voiceOn && (
-            <MicButton
-              listening={voice.listening}
+          {liveOn ? (
+            <LiveStatus state={live.state} />
+          ) : (
+            <>
+              <label className="sr-only" htmlFor="advisor-question">
+                Your question
+              </label>
+              <input
+                id="advisor-question"
+                ref={input}
+                value={voice.listening ? mergeDraft(draft, voice.liveText) : draft}
+                readOnly={voice.listening}
+                onChange={(event) => {
+                  setDraft(event.target.value)
+                  setVoiceNote(null)
+                }}
+                placeholder={voice.listening ? 'Listening…' : 'Ask about your degree progress'}
+                disabled={busy}
+                maxLength={2000}
+                className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none placeholder:text-slate-400 disabled:text-slate-400"
+              />
+            </>
+          )}
+
+          {voiceOn && !liveOn && (
+            <IconButton
+              label={voice.listening ? 'Stop listening' : 'Ask by voice'}
+              pressed={voice.listening}
               disabled={busy || !voice.supported}
               onClick={toggleListening}
-            />
+              className={
+                voice.listening
+                  ? 'animate-pulse bg-rose-600 text-white hover:bg-rose-700'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }
+            >
+              <MicIcon />
+            </IconButton>
           )}
-          <Button type="submit" disabled={busy || voiceBusy || !draft.trim()}>
-            Ask
-          </Button>
+
+          {liveOn ? (
+            <IconButton
+              label="End voice conversation"
+              onClick={live.end}
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              <CloseIcon />
+            </IconButton>
+          ) : draft.trim() || voice.listening || !canTalk ? (
+            <IconButton
+              type="submit"
+              label="Ask"
+              disabled={busy || voiceBusy || !draft.trim()}
+              className="bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+            >
+              <ArrowUpIcon />
+            </IconButton>
+          ) : (
+            <IconButton
+              label="Start voice conversation"
+              disabled={busy}
+              onClick={startLive}
+              className="bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+            >
+              <WaveformIcon />
+            </IconButton>
+          )}
         </form>
 
         {voiceOn && voice.listening && (
-          <p className="mt-2 text-xs font-medium text-rose-700" role="status" aria-live="polite">
-            Listening… it stops when you pause, or click the mic to stop.
+          <p className="mt-2 px-1 text-xs font-medium text-rose-700" role="status" aria-live="polite">
+            Listening… it stops when you pause, or tap the mic to stop.
           </p>
         )}
-        {voiceOn && !voice.listening && (voiceNote || voice.error || !voice.supported) && (
-          <p className="mt-2 text-xs text-slate-500" role="status">
-            {voiceNote ??
-              voice.error ??
-              'This browser cannot record audio. You can still type your question.'}
+        {voiceOn && !voice.listening && (voiceNote || voice.error || live.error) && (
+          <p className="mt-2 px-1 text-xs text-slate-500" role="status">
+            {voiceNote ?? voice.error ?? live.error}
           </p>
         )}
         {clarifications.length > 0 && !voice.listening && (
-          <div className="mt-2 space-y-1.5" role="group" aria-label="Did you mean a course?">
+          <div className="mt-2 space-y-1.5 px-1" role="group" aria-label="Did you mean a course?">
             {clarifications.map((offer) => (
               <div key={offer.spoken} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-slate-600">
@@ -304,9 +377,10 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </div>
         )}
         {voiceOn && (
-          <p className="mt-2 text-xs text-slate-400">
-            Voice input sends your audio to {SPEECH_VENDORS[health?.speech_provider] ?? 'a speech service'} to turn it into
-            text. It is not saved, and nothing goes to the advisor until you press Ask.
+          <p className="mt-2 px-1 text-xs text-slate-400">
+            {liveOn
+              ? "Talk any time to interrupt. Course codes it isn't sure about are read back to you first."
+              : `Voice is sent to ${SPEECH_VENDORS[health?.speech_provider] ?? 'a speech service'} to transcribe and isn't saved.`}
           </p>
         )}
       </Card>
@@ -319,17 +393,118 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   )
 }
 
-/** One advisor answer, with its provenance label and any notice. */
-function AdvisorTurn({ reply }) {
+/** A student turn. `draft` is the words still being heard in a voice conversation. */
+function UserBubble({ text, draft = false }) {
+  return (
+    <div className="flex justify-end">
+      <p
+        className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm px-4 py-2.5 text-sm ${
+          draft ? 'bg-slate-200 text-slate-600' : 'bg-slate-900 text-white'
+        }`}
+      >
+        {text}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Text that types itself out over `ms`, word by word. No `ms` (or 0) shows it
+ * all at once - old turns, an interrupted reply, or a reply whose audio failed.
+ */
+function StreamedText({ text, ms }) {
+  const words = useMemo(() => text.split(/(\s+)/), [text])
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    if (!ms) return undefined
+    const started = Date.now()
+    const timer = setInterval(() => {
+      const count = Math.min(words.length, Math.ceil((words.length * (Date.now() - started)) / ms))
+      setShown(count)
+      if (count >= words.length) clearInterval(timer)
+    }, 40)
+    return () => clearInterval(timer)
+  }, [ms, words])
+  return <AnswerMarkdown text={words.slice(0, ms ? shown : words.length).join('')} />
+}
+
+/**
+ * Engine answers lean on single line breaks (an "Options:" or "Warning:" line
+ * under a bullet, a sentence after a list), which markdown would run together.
+ * Keep every break, and end a list before an unindented line that follows it.
+ */
+function toMarkdown(text) {
+  const BULLET = /^\s*(?:[-*+]|\d+[.)])\s/
+  const out = []
+  let inList = false
+  for (const line of text.split('\n')) {
+    const indented = /^\s+\S/.test(line)
+    if (inList && line.trim() && !BULLET.test(line) && !indented) out.push('')
+    if (BULLET.test(line)) inList = true
+    else if (!indented) inList = false
+    out.push(line)
+  }
+  return out.join('\n').replace(/([^\n])\n(?=[^\n])/g, '$1  \n')
+}
+
+const MARKDOWN_PARTS = {
+  p: (props) => <p className="my-2 first:mt-0 last:mb-0" {...props} />,
+  ul: (props) => <ul className="my-2 list-disc space-y-1 pl-5" {...props} />,
+  ol: (props) => <ol className="my-2 list-decimal space-y-1 pl-5" {...props} />,
+  strong: (props) => <strong className="font-semibold text-slate-900" {...props} />,
+  h1: (props) => <p className="my-2 font-semibold text-slate-900" {...props} />,
+  h2: (props) => <p className="my-2 font-semibold text-slate-900" {...props} />,
+  h3: (props) => <p className="my-2 font-semibold text-slate-900" {...props} />,
+  code: (props) => <code className="rounded bg-white px-1 py-0.5 text-[0.85em]" {...props} />,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noreferrer" className="text-indigo-700 underline hover:text-indigo-900">
+      {children}
+    </a>
+  ),
+}
+
+/** Markdown with no raw HTML: a model's text can format, never inject. */
+function AnswerMarkdown({ text }) {
+  return (
+    <ReactMarkdown components={MARKDOWN_PARTS} skipHtml>
+      {toMarkdown(text)}
+    </ReactMarkdown>
+  )
+}
+
+/** One advisor answer, with its provenance label, links, and any notice. */
+export function AdvisorTurn({ reply, onSpeak, speaking = false, pending = false, revealMs }) {
   const fromModel = reply.source === 'engine+llm'
+  if (pending) {
+    // Waiting for the voice to start: the words appear as they are spoken.
+    return (
+      <div className="flex justify-start">
+        <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3">
+          <Spinner label="Getting ready to speak…" />
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="flex justify-start">
       <div className="max-w-[92%] space-y-2">
         <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
-            {reply.answer}
-          </p>
+          <div className="text-sm leading-relaxed text-slate-800">
+            <StreamedText text={reply.answer} ms={revealMs} />
+          </div>
         </div>
+
+        {reply.details && (
+          // Voice: the reply above is the spoken summary; this is what it points to.
+          <details open className="rounded-xl border border-slate-200 px-4 py-2.5">
+            <summary className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-700">
+              Full answer
+            </summary>
+            <div className="mt-2 text-sm leading-relaxed text-slate-700">
+              <AnswerMarkdown text={reply.details} />
+            </div>
+          </details>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 px-1">
           <span
@@ -353,7 +528,37 @@ function AdvisorTurn({ reply }) {
               Based on: {reply.citations.slice(0, 6).join(', ')}
             </span>
           )}
+
+          {onSpeak && (
+            <IconButton
+              label={speaking ? 'Stop reading' : 'Read aloud'}
+              pressed={speaking}
+              onClick={onSpeak}
+              className={`ml-auto h-7 w-7 ${
+                speaking ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
+              }`}
+            >
+              {speaking ? <StopIcon /> : <SpeakerIcon />}
+            </IconButton>
+          )}
         </div>
+
+        {reply.links?.length > 0 && (
+          <ul className="space-y-1 px-1 text-sm">
+            {reply.links.map((link) => (
+              <li key={link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-700 underline hover:text-indigo-900"
+                >
+                  {link.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {reply.notice && <p className="px-1 text-xs italic text-slate-400">{reply.notice}</p>}
       </div>
@@ -361,27 +566,106 @@ function AdvisorTurn({ reply }) {
   )
 }
 
-/** Click to start listening; click again to stop early. It also stops on a pause. */
-function MicButton({ listening, disabled, onClick }) {
-  const label = listening ? 'Stop listening' : 'Ask by voice'
+const LIVE_LABELS = {
+  listening: 'Listening…',
+  thinking: 'Checking your record…',
+  speaking: 'Speaking — talk to interrupt',
+}
+
+/** Fills the composer during a voice conversation: what the advisor is doing now. */
+function LiveStatus({ state }) {
+  const moving = state === 'listening' || state === 'speaking'
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3 py-1.5" role="status" aria-live="polite">
+      <span className="flex h-5 items-center gap-0.5" aria-hidden="true">
+        {[0, 1, 2, 3, 4].map((bar) => (
+          <span
+            key={bar}
+            className={`w-1 rounded-full ${state === 'listening' ? 'bg-rose-500' : 'bg-slate-900'} ${
+              moving ? 'animate-pulse' : 'opacity-40'
+            }`}
+            style={{ height: `${[8, 14, 20, 14, 8][bar]}px`, animationDelay: `${bar * 120}ms` }}
+          />
+        ))}
+      </span>
+      <span className="truncate text-sm text-slate-600">{LIVE_LABELS[state]}</span>
+    </div>
+  )
+}
+
+/** A round icon button; the label is its accessible name and tooltip. */
+function IconButton({ label, pressed, className = '', type = 'button', children, ...props }) {
   return (
     <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled && !listening}
-      aria-pressed={listening}
+      type={type}
       aria-label={label}
+      aria-pressed={pressed}
       title={label}
-      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full ring-1 ring-inset transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        listening
-          ? 'animate-pulse bg-rose-600 text-white ring-rose-600'
-          : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
-      }`}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:cursor-not-allowed ${className}`}
+      {...props}
     >
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <rect x="9" y="3" width="6" height="12" rx="3" />
-        <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeLinecap="round" />
-      </svg>
+      {children}
     </button>
+  )
+}
+
+const ICON = {
+  viewBox: '0 0 24 24',
+  className: 'h-4 w-4',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+}
+
+function MicIcon() {
+  return (
+    <svg {...ICON}>
+      <rect x="9" y="3" width="6" height="12" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </svg>
+  )
+}
+
+function WaveformIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+    </svg>
+  )
+}
+
+function ArrowUpIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  )
+}
+
+function SpeakerIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M11 5 6 9H3v6h3l5 4V5z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+    </svg>
+  )
+}
+
+function StopIcon() {
+  return (
+    <svg {...ICON} fill="currentColor" stroke="none">
+      <rect x="7" y="7" width="10" height="10" rx="1.5" />
+    </svg>
   )
 }

@@ -90,6 +90,12 @@ class ChatResponse(BaseModel):
     #: "model" when a language model chose which engine answer this question
     #: gets, "keywords" when keyword routing did. The answer is the engine's either way.
     understood_by: str = "keywords"
+    #: Why the engine's text is shown instead of a model-written answer: None when a
+    #: model wrote it (or none was meant to), else "rephrase_off",
+    #: "model_unavailable", "model_error" or "check_failed".
+    fallback: str | None = None
+    #: Seconds the writing model took, when it was called.
+    model_seconds: float | None = None
     #: Curated links (never model-supplied) for questions the advisor cannot answer.
     links: list[dict[str, str]] = []
     #: Set instead of an answer when a live turn needs a course code confirmed.
@@ -234,6 +240,8 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         notice=reply.notice,
         conversation_id=body.conversation_id,
         understood_by=reply.understood_by,
+        fallback=reply.fallback,
+        model_seconds=reply.model_seconds,
         links=[link.as_dict() for link in reply.links],
         details=(
             reply.prepared

@@ -191,7 +191,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
 
         <div
           ref={scroller}
-          className="max-h-[34rem] space-y-5 overflow-y-auto pr-1"
+          className="nice-scroll max-h-[max(28rem,calc(100vh-22rem))] space-y-5 overflow-y-auto pr-2"
           aria-live="polite"
           aria-busy={waiting}
         >

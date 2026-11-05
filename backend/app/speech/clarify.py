@@ -159,9 +159,14 @@ def readback_question(
             return Clarification(
                 spoken=code,
                 candidates=(),
-                question=f"I heard {code}, but that course isn't in the catalog. Which course did you mean?",
+                question=(
+                    f"I heard {code}, but that course isn't in the catalog. "
+                    "Which course did you mean?"
+                ),
             )
     if named and confidence < READBACK_CONFIDENCE:
-        return Clarification(spoken=named[0], candidates=(named[0],), question=f"Did you mean {named[0]}?")
+        return Clarification(
+            spoken=named[0], candidates=(named[0],), question=f"Did you mean {named[0]}?"
+        )
     bare = suggest_clarifications(text, known, context_subjects)
     return bare[0] if bare else None

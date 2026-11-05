@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from app.advisor.answers import Intent
 from app.advisor.chat import ask
 from app.advisor.links import Link, all_links, links_for
-from app.advisor.answers import Intent
 from tests.test_advisor import StubProvider, facts  # noqa: F401 - fixture
 
 

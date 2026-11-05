@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import get_settings
 from app.routers import chat as chat_router
 from app.speech.base import SpeechError
 
@@ -24,7 +23,9 @@ def spoken(monkeypatch):
 
 
 def test_speak_route_returns_audio(client, spoken) -> None:
-    r = client.post("/advisor/speak", json={"text": f"Take COSC 241. See {REG['url']}", "links": [REG]})
+    r = client.post(
+        "/advisor/speak", json={"text": f"Take COSC 241. See {REG['url']}", "links": [REG]}
+    )
     assert r.status_code == 200
     assert r.headers["content-type"] == "audio/mpeg"
     assert r.content == b"ID3-mp3"

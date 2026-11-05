@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.advisor.chat import AdvisorReply, ask, conversations
 from app.advisor.facts import build_facts
+from app.advisor.links import Link
 from app.auth.dependencies import CurrentUser
 from app.catalog.loader import CatalogError
 from app.catalog.registry import registry
@@ -36,7 +37,6 @@ from app.speech.keyterms import spoken_course_codes
 from app.speech.registry import transcribe
 from app.speech.speakable import to_speech
 from app.speech.tts import synthesize
-from app.advisor.links import Link
 
 router = APIRouter(prefix="/advisor", tags=["advisor"])
 
@@ -88,7 +88,7 @@ class ChatResponse(BaseModel):
     #: Curated links (never model-supplied) for questions the advisor cannot answer.
     links: list[dict[str, str]] = []
     #: Set instead of an answer when a live turn needs a course code confirmed.
-    clarification: "Clarification | None" = None
+    clarification: Clarification | None = None
 
 
 class AdvisorHealth(BaseModel):
@@ -162,7 +162,9 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
 
     catalog_codes = [c.code for p in registry.list_programs() for c in p.courses]
     if body.mode == "live":
-        context = subjects_in(conversations.recent_text(student_id, body.conversation_id), catalog_codes)
+        context = subjects_in(
+            conversations.recent_text(student_id, body.conversation_id), catalog_codes
+        )
         confidence = 1.0 if body.confidence is None else body.confidence
         if question := readback_question(body.message, confidence, catalog_codes, context):
             # Ask back instead of answering: a misheard code must never be

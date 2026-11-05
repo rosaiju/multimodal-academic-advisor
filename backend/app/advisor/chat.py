@@ -82,10 +82,27 @@ A deterministic answer to the student's question has already been prepared:
 {prepared}
 --- END PREPARED ANSWER ---
 
-Rephrase the prepared answer in a natural, friendly advising voice. Keep every
-fact, number and course code exactly as given, each with the same meaning - a
-percentage of progress stays a percentage of progress. You may reorder and reword. You
-may not add academic claims that are not in the facts block.
+Rephrase the prepared answer as the student's academic advisor would explain it
+in person - warm, direct and encouraging, never vague:
+- Lead with the answer to their question in one sentence.
+- Then explain WHY, using the verified facts: which requirement a course belongs
+  to, what it unlocks, what is still blocking something. Only facts from the block
+  above - if the facts do not explain why, do not guess.
+- Give one concrete next step the facts support (for example, the eligible course
+  that unlocks the most), and say a human advisor confirms registration.
+- If they sound worried, acknowledge it in a sentence and point to what is in their
+  control. Do not diagnose, and do not promise outcomes or dates.
+- You may end with ONE short offer to help further ("Want me to show what COSC220
+  unlocks?"), naming only things in the facts.
+- On a follow-up, use the conversation: answer what they are actually asking now,
+  not the earlier question again.
+
+Leave out any sentence about where the answer came from (for example "Every line
+above comes from the catalog..."): you are writing it, and the app labels that.
+
+Keep every fact, number and course code from the prepared answer, each with the
+same meaning - a percentage of progress stays a percentage of progress. You may
+reorder and reword. You may not add academic claims that are not in the facts block.
 
 Format the answer in Markdown for a chat window: short paragraphs, a "-" bullet
 list when naming several courses or requirements, and **bold** for the main
@@ -234,6 +251,13 @@ class AdvisorReply:
     #: Live voice: the student asked for everything, so speak the whole answer
     #: instead of the brief cut.
     read_in_full: bool = False
+    #: Why the student is reading the engine's own text instead of a model-written
+    #: answer. None when a model wrote it, or when no model was ever meant to
+    #: (fixed text: no record, crisis, "list them all"). Otherwise one of
+    #: "rephrase_off", "model_unavailable", "model_error", "check_failed".
+    fallback: str | None = None
+    #: Seconds the writing model took, when it was called.
+    model_seconds: float | None = None
 
 
 def _known_codes(facts: AdvisorFacts) -> set[str]:
@@ -259,6 +283,25 @@ def _strip_reasoning(text: str) -> str:
     if "<think>" in text.lower():  # unterminated: the answer never started
         return ""
     return text.strip()
+
+
+#: Engine sentences that say no language model wrote the text. True of the engine's
+#: answer, false once a model has rewritten it - seen live, copied by Gemini.
+_ENGINE_ONLY_CLAIM = re.compile(
+    r"\s*Every line above comes from [^.]*not from a language model's opinion\.", re.IGNORECASE
+)
+
+
+def _drop_engine_only_claims(text: str) -> str:
+    return _ENGINE_ONLY_CLAIM.sub("", text).strip()
+
+
+def _short_reason(exc: Exception) -> str:
+    """A provider error as one short line for the student: no response body."""
+    text = str(exc).split(": {", 1)[0].splitlines()[0].strip()
+    if "(503)" in text:
+        return "the model is busy right now (503)"
+    return text[:120]
 
 
 def _history_for_prompt(conversation: Conversation, question: str, keep: int) -> list[ChatTurn]:
@@ -363,7 +406,12 @@ def ask(
     )
 
     def engine_answer(
-        notice: str, *, model: str | None = None, discarded: str | None = None
+        notice: str,
+        *,
+        fallback: str,
+        model: str | None = None,
+        discarded: str | None = None,
+        seconds: float | None = None,
     ) -> AdvisorReply:
         return AdvisorReply(
             answer=prepared.text,
@@ -376,6 +424,8 @@ def ask(
             notice=notice,
             prepared=prepared.text,
             discarded=discarded,
+            fallback=fallback,
+            model_seconds=seconds,
         )
 
     # Nothing to rephrase against: with no record, the deterministic text already
@@ -397,16 +447,22 @@ def ask(
                 "A language model read your question and chose this answer; the "
                 "degree engine wrote it. Model rephrasing is switched off."
             )
-        return finish(replace(base, notice=notice))
+        return finish(replace(base, notice=notice, fallback="rephrase_off"))
 
     provider = provider or get_chat_provider()
     usable, reason = provider.available()
     if not usable:
+        logger.info(
+            "advisor answer: provider=%s unavailable (%s) source=engine fallback",
+            provider.provider_id,
+            reason,
+        )
         return finish(
             engine_answer(
                 f"Answered from the degree engine. The language model is not "
                 f"available ({reason}), which changes nothing about the numbers "
-                f"above - they are computed, not generated."
+                f"above - they are computed, not generated.",
+                fallback="model_unavailable",
             )
         )
 
@@ -417,6 +473,7 @@ def ask(
         prepared=prepared.text,
     )
 
+    started = time.perf_counter()
     try:
         raw = provider.complete(
             system=system,
@@ -426,7 +483,10 @@ def ask(
         logger.info("chat provider unavailable, serving deterministic answer: %s", exc)
         return finish(
             engine_answer(
-                f"Answered from the degree engine. The language model could not be reached ({exc})."
+                "Answered from the degree engine. The language model could not be "
+                f"reached ({_short_reason(exc)}).",
+                fallback="model_unavailable",
+                seconds=round(time.perf_counter() - started, 2),
             )
         )
     except Exception:  # noqa: BLE001 - a provider bug must not become a 500
@@ -434,14 +494,24 @@ def ask(
         return finish(
             engine_answer(
                 "Answered from the degree engine. The language model returned "
-                "something that could not be used."
+                "something that could not be used.",
+                fallback="model_error",
+                seconds=round(time.perf_counter() - started, 2),
             )
         )
 
-    text = _strip_reasoning(raw) if isinstance(raw, str) else ""
+    seconds = round(time.perf_counter() - started, 2)
+    text = _drop_engine_only_claims(_strip_reasoning(raw)) if isinstance(raw, str) else ""
     problems = check_rephrasing(prepared, text, facts, question=asked, brief=live)
     if problems:
-        logger.warning("discarding model answer: %s", "; ".join(problems))
+        logger.warning(
+            "advisor answer: provider=%s model=%s intent=%s seconds=%s check=REJECTED (%s)",
+            provider.provider_id,
+            provider.name,
+            prepared.intent,
+            seconds,
+            "; ".join(problems),
+        )
         return finish(
             engine_answer(
                 "The language model's phrasing did not match the degree engine "
@@ -449,8 +519,18 @@ def ask(
                 "engine's answer.",
                 model=provider.name,
                 discarded=text,
+                fallback="check_failed",
+                seconds=seconds,
             )
         )
+
+    logger.info(
+        "advisor answer: provider=%s model=%s intent=%s seconds=%s check=PASSED source=engine+llm",
+        provider.provider_id,
+        provider.name,
+        prepared.intent,
+        seconds,
+    )
 
     return finish(
         AdvisorReply(
@@ -467,5 +547,6 @@ def ask(
                 "comes from the engine."
             ),
             prepared=prepared.text,
+            model_seconds=seconds,
         )
     )

@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -15,7 +16,11 @@ REPO_ROOT = BACKEND_DIR.parent
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=BACKEND_DIR / ".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=BACKEND_DIR / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        # Lets code and tests pass gemini_api_key=... despite its env-var aliases.
+        populate_by_name=True,
     )
 
     # --- LLM provider ---
@@ -24,14 +29,21 @@ class Settings(BaseSettings):
     llm_provider: Literal["anthropic", "openai", "gemini", "ollama", "openrouter"] = "anthropic"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    gemini_api_key: str = ""
+    #: GEMINI_API_KEY, or GOOGLE_API_KEY (the name Google's own tools use).
+    gemini_api_key: str = Field(
+        default="", validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY")
+    )
 
     anthropic_chat_model: str = "claude-haiku-4-5-20251001"
     anthropic_vision_model: str = "claude-sonnet-5"
     openai_chat_model: str = "gpt-4o-mini"
     openai_vision_model: str = "gpt-4o"
-    gemini_chat_model: str = "gemini-2.0-flash"
-    gemini_vision_model: str = "gemini-2.0-flash"
+    #: gemini-2.0-flash and gemini-2.5-flash are closed to new keys (404, checked
+    #: live 2026-11-05); the full flash models were overloaded (503) or returned
+    #: empty text after spending the budget on hidden thinking. The lite model
+    #: answered in about a second. Override with GEMINI_CHAT_MODEL.
+    gemini_chat_model: str = "gemini-3.5-flash-lite"
+    gemini_vision_model: str = "gemini-3.5-flash-lite"
 
     #: OpenRouter: one key, many models (including free ones). OpenAI-compatible.
     #: Safe with weak models: the model only rephrases, and check_rephrasing

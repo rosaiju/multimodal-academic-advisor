@@ -23,6 +23,7 @@ from __future__ import annotations
 import http.client
 import json
 import logging
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -243,12 +244,7 @@ class GeminiChatProvider:
             ],
             "generationConfig": generation,
         }
-        data = _http_json(
-            f"{self.API}/{self._model}:generateContent",
-            payload,
-            timeout=self._timeout,
-            headers={"x-goog-api-key": self._api_key},
-        )
+        data = self._post(f"{self.API}/{self._model}:generateContent", payload)
         candidates = data.get("candidates") or []
         if not isinstance(candidates, list) or not candidates:
             blocked = (data.get("promptFeedback") or {}).get("blockReason")
@@ -266,6 +262,24 @@ class GeminiChatProvider:
         if not text:
             raise ProviderUnavailable("gemini returned an empty completion")
         return text
+
+    #: Gemini answers "503 high demand" in spikes that usually clear within seconds
+    #: (seen live 2026-11-05). Retried briefly; a quota error (429) or a bad request
+    #: is not, because retrying cannot fix it.
+    RETRY_DELAYS = (1.0, 2.5)
+
+    def _post(self, url: str, payload: dict) -> dict:
+        for delay in (*self.RETRY_DELAYS, None):
+            try:
+                return _http_json(
+                    url, payload, timeout=self._timeout, headers={"x-goog-api-key": self._api_key}
+                )
+            except ProviderUnavailable as exc:
+                if delay is None or "(503)" not in str(exc):
+                    raise
+                logger.info("gemini busy (503), retrying in %ss", delay)
+                time.sleep(delay)
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def complete_json(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 120) -> str:
         """JSON-mode completion (`responseMimeType: application/json`), for routing."""

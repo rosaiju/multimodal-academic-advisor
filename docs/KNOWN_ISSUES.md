@@ -20,3 +20,6 @@
 | 16 | Gemini is chat-only: `gemini_vision_model` exists in settings but no Gemini vision provider (vision = anthropic/openai/ollama) | Image reading cannot use Gemini | Add a Gemini vision provider when a key exists |
 | 17 | Default Gemini model `gemini-2.0-flash` never called live | May be retired by Google; unknown until a key is used | Run the live smoke test with a key, update the model name if needed |
 | 18 | `catalog.doctor --strict` exits 1 (34 courses in no requirement block) | Same on `main`; CI does not run it | Resolves as electives/tracks get encoded |
+| 19 | Gemini free tier returns 503 "high demand" in bursts (seen repeatedly 2026-11-05) | Some answers fall back to the engine, labelled as such | Retried twice already; a paid tier or a second model would reduce it |
+| 20 | Gemini rewrites often drop a figure or course code from long lists, so the check rejects them (3 of 8 live) | Engine answer shown instead - safe, less natural | Shorter prepared answers for list questions, or allow omitting list items with "see the full list" like live voice |
+| 21 | `gemini-2.0-flash` / `gemini-2.5-flash` closed to new keys; full flash models returned empty text (hidden thinking used the token budget) | Default changed to `gemini-3.5-flash-lite` | Re-check models each semester; set `GEMINI_CHAT_MODEL` to change |

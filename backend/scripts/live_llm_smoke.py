@@ -159,6 +159,10 @@ def main() -> int:
     if args.out:
         Path(args.out).write_text(json.dumps(results, indent=2), encoding="utf-8")
         print(f"full results: {args.out}")
+    if live == 0:
+        # The docstring's promise: a run where the model was never used is not a pass.
+        print("FAIL: no answer came from the live model.")
+        return 2
     return 0 if failures == 0 else 1
 
 

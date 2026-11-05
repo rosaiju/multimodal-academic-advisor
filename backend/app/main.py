@@ -51,6 +51,15 @@ async def lifespan(app: FastAPI):
         settings.llm_provider,
         settings.llm_configured,
     )
+    # Which model writes advisor answers. The key itself is never logged - only
+    # whether one was loaded, so a missing .env entry is visible at a glance.
+    logger.info(
+        "advisor answers: provider=%s model=%s api_key=%s rephrase=%s",
+        settings.llm_provider,
+        settings.chat_model,
+        "loaded" if settings.chat_api_key else "not set",
+        "on" if settings.advisor_rephrase else "off",
+    )
     yield
 
 

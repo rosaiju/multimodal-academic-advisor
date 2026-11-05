@@ -472,9 +472,57 @@ function AnswerMarkdown({ text }) {
   )
 }
 
+const PROVIDER_NAMES = {
+  gemini: 'Gemini',
+  anthropic: 'Claude',
+  openai: 'OpenAI',
+  ollama: 'the local model',
+  openrouter: 'OpenRouter',
+}
+
+const TONES = {
+  model: 'bg-violet-50 text-violet-700 ring-violet-600/20',
+  engine: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  fallback: 'bg-amber-50 text-amber-800 ring-amber-600/30',
+}
+
+/**
+ * Who wrote the text the student is reading - from the API's own fields, never
+ * guessed: `source` says whether a model's answer was used, `fallback` why not.
+ */
+export function provenance(reply) {
+  const who = PROVIDER_NAMES[reply.provider] ?? reply.model ?? 'a language model'
+  if (reply.source === 'engine+llm') {
+    return {
+      kind: 'model',
+      label: `Written by ${who} · checked by the engine`,
+      title: `${reply.model ?? who} wrote this from the degree engine's verified facts. Every number, course code and eligibility statement was checked against the engine before it was shown.`,
+    }
+  }
+  if (reply.fallback === 'check_failed') {
+    return {
+      kind: 'fallback',
+      label: `Fallback · ${who}'s answer failed the fact check`,
+      title: `${who} wrote an answer that did not match the degree engine, so it was discarded and you are reading the engine's own answer.`,
+    }
+  }
+  if (reply.fallback === 'model_unavailable' || reply.fallback === 'model_error') {
+    return {
+      kind: 'fallback',
+      label: `Fallback · ${who} unavailable`,
+      title: `${who} could not answer, so you are reading the degree engine's own answer.`,
+    }
+  }
+  return {
+    kind: 'engine',
+    label: 'Computed by the engine',
+    title: 'Written by the deterministic degree engine; no language model wrote this text.',
+  }
+}
+
 /** One advisor answer, with its provenance label, links, and any notice. */
 export function AdvisorTurn({ reply, onSpeak, speaking = false, pending = false, revealMs }) {
-  const fromModel = reply.source === 'engine+llm'
+  const origin = provenance(reply)
   if (pending) {
     // Waiting for the voice to start: the words appear as they are spoken.
     return (
@@ -508,13 +556,10 @@ export function AdvisorTurn({ reply, onSpeak, speaking = false, pending = false,
 
         <div className="flex flex-wrap items-center gap-2 px-1">
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-              fromModel
-                ? 'bg-violet-50 text-violet-700 ring-violet-600/20'
-                : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
-            }`}
+            title={origin.title}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONES[origin.kind]}`}
           >
-            {fromModel ? `Phrased by ${reply.model ?? 'a model'}` : 'Computed by the engine'}
+            {origin.label}
           </span>
 
           {reply.understood_by && (

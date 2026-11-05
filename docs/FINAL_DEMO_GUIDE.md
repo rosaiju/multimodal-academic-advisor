@@ -14,11 +14,19 @@ integration worktree `C:\Users\rohan\advisor-ai-integration`
    ```powershell
    ollama list     # must show qwen2.5:7b and qwen2.5vl:3b
    ```
-2. Start both servers (each opens its own window — keep them open):
+2. Start both servers with one command (each opens its own window — keep them open):
    ```powershell
-   cd C:\Users\rohan\advisor-ai-integration
+   cd C:\Users\rohan\advisor-ai          # or any worktree of the repo
    .\scripts\start-demo.ps1
    ```
+   It sets itself up: creates `backend\.venv` from an installed Python 3.11–3.14 if
+   missing (or moves a broken one aside), installs backend packages when
+   `pyproject.toml` changes, runs `npm install` when `node_modules` is missing, copies
+   the main checkout's `backend\.env` into a new worktree (never overwriting, never
+   printed), refuses busy ports without stopping anything, and waits until both
+   servers answer before printing `Ready`. Stop with `.\scripts\start-demo.ps1 -Stop`
+   (stops only the windows it started). Logs: `.demo\backend.log`, `.demo\frontend.log`.
+   To choose the Python used for the venv: `$env:ADVISOR_PYTHON = 'C:\path\python.exe'`.
 3. Open <http://localhost:5173>, signed out, zoom ~125%.
 4. **Warm the models** (the first call loads them, ~20 s): register a throwaway account,
    upload `data\samples\demo_transcript.png`, ask one question. Then sign out and register
@@ -96,7 +104,8 @@ Things the AI does that the engine alone cannot:
 | Model slow / Ollama down | Answers still come — the advisor falls back to keywords and says so ("Matched by keywords"). Nothing breaks |
 | Laptop overheating | Close the windows, run `.\scripts\start-demo.ps1 -EngineOnly` — no model at all, everything instant |
 | Mic not heard | Type the same question — same engine answer |
-| "Cannot reach the backend" | A server window was closed. Rerun `.\scripts\start-demo.ps1` |
+| "Cannot reach the backend" / 502 | A server window was closed. Run `.\scripts\start-demo.ps1 -Stop`, then `.\scripts\start-demo.ps1` |
+| "Port 8000 is already in use" | Another server holds it; the script names the process. Close that window (the script never stops it for you) |
 | Lands on Progress instead of Upload | That account already has a record — sign out, register a new address |
 
 ---

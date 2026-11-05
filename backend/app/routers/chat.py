@@ -10,7 +10,7 @@ hands it to `app.advisor`, and shapes the reply.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
@@ -25,7 +25,12 @@ from app.ingestion.store import RecordStore, StoredRecordError
 from app.llm.chat import get_chat_provider
 from app.speech import registry as speech_registry
 from app.speech.base import SpeechError
-from app.speech.clarify import subjects_in, suggest_clarifications
+from app.speech.clarify import (
+    named_courses,
+    readback_question,
+    subjects_in,
+    suggest_clarifications,
+)
 from app.speech.course_codes import normalize_course_mentions
 from app.speech.keyterms import spoken_course_codes
 from app.speech.registry import transcribe
@@ -62,6 +67,11 @@ class ChatRequest(BaseModel):
     #: Set false to see the raw engine answer with no model involved. The UI uses
     #: it for a "show me the deterministic answer" toggle during the demo.
     use_llm: bool = True
+    #: "live" = a hands-free voice turn, sent without the student reviewing the
+    #: transcript. Such turns are read back ("Did you mean COSC 241?") when unsure.
+    mode: Literal["text", "live"] = "text"
+    #: The live transcript's confidence, 0-1. Only read in live mode.
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class ChatResponse(BaseModel):
@@ -77,6 +87,8 @@ class ChatResponse(BaseModel):
     conversation_id: str
     #: Curated links (never model-supplied) for questions the advisor cannot answer.
     links: list[dict[str, str]] = []
+    #: Set instead of an answer when a live turn needs a course code confirmed.
+    clarification: "Clarification | None" = None
 
 
 class AdvisorHealth(BaseModel):
@@ -148,6 +160,23 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
     student_id = user.student_id
     facts = None
 
+    catalog_codes = [c.code for p in registry.list_programs() for c in p.courses]
+    if body.mode == "live":
+        context = subjects_in(conversations.recent_text(student_id, body.conversation_id), catalog_codes)
+        confidence = 1.0 if body.confidence is None else body.confidence
+        if question := readback_question(body.message, confidence, catalog_codes, context):
+            # Ask back instead of answering: a misheard code must never be
+            # answered aloud as if it were fact. The advisor is not called.
+            return ChatResponse(
+                answer=question.question,
+                intent="readback",
+                source="readback",
+                grounded=True,
+                citations=[],
+                conversation_id=body.conversation_id,
+                clarification=Clarification(**question.as_dict()),
+            )
+
     try:
         stored = _store().load(student_id)
     except StoredRecordError:
@@ -170,8 +199,13 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         history_turns=settings.advisor_history_turns,
         use_llm=body.use_llm,
     )
+    answer = reply.answer
+    named = named_courses(body.message)
+    if body.mode == "live" and len(named) == 1 and not answer.startswith(named[0]):
+        # Say back the code that was heard, so a mishearing is audible.
+        answer = f"For {named[0]}: {answer}"
     return ChatResponse(
-        answer=reply.answer,
+        answer=answer,
         intent=str(reply.intent),
         source=reply.source,
         grounded=reply.grounded,

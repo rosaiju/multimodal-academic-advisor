@@ -33,14 +33,14 @@ export function useSpeaker() {
   }, [])
 
   const speak = useCallback(
-    async (text, links = []) => {
+    async (text, links = [], { brief = false } = {}) => {
       stop()
       const mine = generation.current
       setError(null)
       setSpeaking(true)
       let blob
       try {
-        blob = await speakText({ text, links })
+        blob = await speakText({ text, links, brief })
       } catch {
         if (mounted.current) {
           setSpeaking(false)

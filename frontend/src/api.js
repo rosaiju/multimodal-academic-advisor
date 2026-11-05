@@ -162,13 +162,13 @@ export function askAdvisor({
 }
 
 /** POST /advisor/speak - an advisor answer as spoken mp3 (a Blob). */
-export async function speakText({ text, links = [] }) {
+export async function speakText({ text, links = [], brief = false }) {
   const headers = { 'Content-Type': 'application/json' }
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
   const response = await fetch(`${BASE}/advisor/speak`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ text, links }),
+    body: JSON.stringify({ text, links, brief }),
   })
   if (!response.ok) {
     const error = new Error(`${response.status} ${response.statusText}`)

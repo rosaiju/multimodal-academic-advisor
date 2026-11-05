@@ -78,6 +78,27 @@ fact, number and course code exactly as given, each with the same meaning - a
 percentage of progress stays a percentage of progress. You may reorder and reword. You
 may not add academic claims that are not in the facts block."""
 
+#: Live voice: the same facts and prepared answer, but the model SUMMARIZES for
+#: speech. Checked with check_rephrasing(brief=True): it may leave details out,
+#: never distort them, and every caveat, blocker and refusal must survive.
+LIVE_PROMPT = (
+    SYSTEM_PROMPT.rsplit("Rephrase the prepared answer", 1)[0]
+    + """This answer will be SPOKEN ALOUD to the student, so it must be short.
+
+Answer the student's immediate question in a natural, friendly advising voice.
+Start with the main takeaway and, when supported, the next action. Default to two
+or three short sentences.
+
+Summarize rather than reading the full prepared answer. You may omit supporting
+details that are unnecessary to answer the question, but preserve every caveat,
+limitation, and refusal in the prepared answer. Never omit information that would
+change the student's registration decision or misrepresent a course's status.
+
+For every fact you include, preserve its meaning and reproduce numbers and course
+codes exactly. Use only the verified facts. If the necessary caveats require a
+longer answer, prioritize accuracy over brevity. No lists, headings or markdown."""
+)
+
 
 @dataclass
 class Conversation:
@@ -201,6 +222,7 @@ def ask(
     provider: ChatProvider | None = None,
     history_turns: int = 12,
     use_llm: bool = True,
+    live: bool = False,
 ) -> AdvisorReply:
     """Answer one question. Never raises for a provider problem."""
     question = question.strip()
@@ -256,7 +278,7 @@ def ask(
             )
         )
 
-    system = SYSTEM_PROMPT.format(
+    system = (LIVE_PROMPT if live else SYSTEM_PROMPT).format(
         institution=facts.institution or "the university",
         program=facts.program_name,
         facts=render_facts(facts),
@@ -272,8 +294,7 @@ def ask(
         logger.info("chat provider unavailable, serving deterministic answer: %s", exc)
         return finish(
             engine_answer(
-                f"Answered from the degree engine. The language model could not "
-                f"be reached ({exc})."
+                f"Answered from the degree engine. The language model could not be reached ({exc})."
             )
         )
     except Exception:  # noqa: BLE001 - a provider bug must not become a 500
@@ -286,7 +307,7 @@ def ask(
         )
 
     text = _strip_reasoning(raw) if isinstance(raw, str) else ""
-    problems = check_rephrasing(prepared, text, facts, question=question)
+    problems = check_rephrasing(prepared, text, facts, question=question, brief=live)
     if problems:
         logger.warning("discarding model answer: %s", "; ".join(problems))
         return finish(

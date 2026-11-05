@@ -32,7 +32,7 @@ describe('useSpeaker', () => {
       done = result.current.speak('Hello', [])
     })
     expect(result.current.speaking).toBe(true)
-    expect(speakText).toHaveBeenCalledWith({ text: 'Hello', links: [] })
+    expect(speakText).toHaveBeenCalledWith({ text: 'Hello', links: [], brief: false })
     await act(async () => {
       audios[0].onended()
       await done

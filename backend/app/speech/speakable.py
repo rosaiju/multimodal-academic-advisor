@@ -25,7 +25,41 @@ def _join(items: list[str]) -> str:
     return ", ".join(items[:-1]) + ", and " + items[-1]
 
 
-def to_speech(text: str, links: Sequence[Link] = ()) -> str:
+#: Brief (live voice) mode: list items spoken before "the rest is on screen".
+BRIEF_ITEMS = 3
+_PARTIAL = re.compile(r"\b(partial|incomplete)\b", re.IGNORECASE)
+BRIEF_CAVEAT = "The catalog I use is still partial, so check with your advisor."
+
+
+def _brief(text: str) -> str:
+    """The engine's full answer cut down for speech: the headline paragraph, at
+    most BRIEF_ITEMS list items, and the partial-catalog caveat said once.
+    Deterministic - it only removes text, never adds a fact."""
+    paragraphs = [p for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+    if not paragraphs:
+        return text
+    lines = paragraphs[0].splitlines()
+    first = next((i for i, ln in enumerate(lines) if _BULLET.match(ln)), len(lines))
+    head = lines[:first]  # indented "Options: ..." lines under bullets are dropped
+    items = [ln for ln in lines if _BULLET.match(ln)]
+    if not items and len(paragraphs) > 1:
+        items = [ln for ln in paragraphs[1].splitlines() if _BULLET.match(ln)]
+    # "- COSC220 Data Structures (4 cr) - required by ..." -> keep the part before " - ".
+    # A " - " before a lowercase word starts detail; "General Education - Critical" stays.
+    kept = [re.split(r" - (?=[a-z])", ln, maxsplit=1)[0] for ln in items[:BRIEF_ITEMS]]
+    out = "\n".join([*head, *kept])
+    if len(items) > BRIEF_ITEMS:
+        out += f"\n\nAnd {len(items) - BRIEF_ITEMS} more. The full list is on your screen."
+    elif len(paragraphs) > 1:
+        out += "\n\nThe details are on your screen."
+    if _PARTIAL.search(text) and not _PARTIAL.search(out):
+        out += "\n\n" + BRIEF_CAVEAT
+    return out
+
+
+def to_speech(text: str, links: Sequence[Link] = (), *, brief: bool = False) -> str:
+    if brief:
+        text = _brief(text)
     text = _MD_LINK.sub(lambda m: m[1], text)  # [name](url) -> name
     for link in links:
         text = text.replace(link.url, link.name)

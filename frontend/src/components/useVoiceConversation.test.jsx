@@ -61,10 +61,18 @@ describe('useVoiceConversation', () => {
       expect.objectContaining({ message: 'what do I have left', mode: 'live', confidence: 0.95 }),
     )
     expect(result.current.state).toBe('speaking')
-    expect(speaker.speak).toHaveBeenCalledWith('You have 7 courses left.', [])
+    expect(speaker.speak).toHaveBeenCalledWith('You have 7 courses left.', [], { brief: true })
     await endSpeech()
     expect(result.current.state).toBe('idle')
     expect(result.current.turns.map((t) => t.role)).toEqual(['user', 'advisor'])
+  })
+
+  it('a model summary is spoken as-is, not cut down again', async () => {
+    askAdvisor.mockResolvedValue(reply('You have 7 left.', { source: 'engine+llm' }))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    expect(speaker.speak).toHaveBeenCalledWith('You have 7 left.', [], { brief: false })
   })
 
   it('hands-free returns to listening after speaking', async () => {

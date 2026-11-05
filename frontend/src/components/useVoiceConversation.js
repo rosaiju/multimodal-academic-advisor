@@ -76,7 +76,11 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
 
       setState('speaking')
       if (handsFreeRef.current) liveRef.current?.start() // listen during playback: barge-in
-      await speakerRef.current.speak(reply.answer, reply.links ?? [])
+      // A model summary (engine+llm) is already short; an engine answer is cut down
+      // for speech by the backend's deterministic brief pass. The screen shows it all.
+      await speakerRef.current.speak(reply.answer, reply.links ?? [], {
+        brief: reply.source !== 'engine+llm',
+      })
       if (turn !== turnRef.current || !activeRef.current) return // interrupted or ended
 
       if (handsFreeRef.current) listen()

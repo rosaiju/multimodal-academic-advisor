@@ -136,6 +136,10 @@ def advisor_health() -> AdvisorHealth:
     running on the engine alone. For Ollama this genuinely probes the server."""
     provider = get_chat_provider()
     available, reason = provider.available()
+    # A key that is set can still be dead (expired, revoked): ask the provider.
+    probe = getattr(provider, "probe", None)
+    if available and probe is not None:
+        available, reason = probe()
     return AdvisorHealth(
         provider=provider.provider_id,
         model=provider.name,
@@ -200,6 +204,7 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         conversation_id=body.conversation_id,
         history_turns=settings.advisor_history_turns,
         use_llm=body.use_llm,
+        live=body.mode == "live",
     )
     answer = reply.answer
     named = named_courses(body.message)
@@ -288,6 +293,9 @@ class LinkModel(BaseModel):
 class SpeakRequest(BaseModel):
     text: str
     links: list[LinkModel] = []
+    #: Live voice: speak a short version (headline, a few items, caveats) of an
+    #: engine answer. The full answer stays on screen.
+    brief: bool = False
 
 
 @router.post("/speak", response_class=Response)
@@ -300,7 +308,7 @@ def speak(user: CurrentUser, body: SpeakRequest) -> Response:
         raise HTTPException(status_code=413, detail="text too long to speak")
     links = [Link(link.name, link.url) for link in body.links]
     try:
-        audio = synthesize(to_speech(body.text, links))
+        audio = synthesize(to_speech(body.text, links, brief=body.brief))
     except SpeechError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return Response(content=audio, media_type="audio/mpeg")

@@ -232,8 +232,15 @@ def check_rephrasing(
     facts: AdvisorFacts,
     *,
     question: str = "",
+    brief: bool = False,
 ) -> list[str]:
-    """Every way `text` departs from the engine's answer. Empty means it may ship."""
+    """Every way `text` departs from the engine's answer. Empty means it may ship.
+
+    `brief=True` is for live voice, where the model is asked to summarize: it may
+    LEAVE OUT course codes and credit figures. Everything else still applies - no
+    invented code or number, no flipped status, no graduation promise, no wrong
+    title, and every caveat, blocker and refusal kept.
+    """
     if isinstance(prepared, GroundedAnswer):
         prepared_text, intent, grounded = prepared.text, prepared.intent, prepared.grounded
     else:
@@ -250,14 +257,14 @@ def check_rephrasing(
     if invented:
         problems.append(f"mentions course codes the engine did not supply: {', '.join(invented)}")
     dropped = sorted(_required_codes(prepared_text, subjects) - course_codes(text, subjects))
-    if dropped:
+    if dropped and not brief:
         problems.append(f"drops course codes from the engine's answer: {', '.join(dropped)}")
 
     # 2. Numbers: credit figures kept, and no figure the engine never produced.
     prepared_numbers = numbers(prepared_text, subjects)
     stated = numbers(text, subjects)
     missing = _required_numbers(facts, prepared_text) - stated
-    if missing:
+    if missing and not brief:
         problems.append(
             "drops credit figures from the engine's answer: "
             + ", ".join(_fmt(n) for n in sorted(missing))

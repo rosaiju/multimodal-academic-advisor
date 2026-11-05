@@ -364,3 +364,22 @@ class TestOpenRouterWireFormat:
         settings = Settings(llm_provider="openrouter", openrouter_api_key="k")
         assert isinstance(get_chat_provider(settings), OpenRouterChatProvider)
         assert settings.chat_api_key == "k"
+
+
+class TestHealthProbe:
+    def test_health_reports_a_dead_key(self, client, monkeypatch) -> None:
+        from app.routers import chat as chat_router
+
+        class Dead:
+            provider_id, name = "openai", "gpt-4o-mini"
+
+            def available(self):
+                return True, "configured"
+
+            def probe(self):
+                return False, "the API key was rejected (401): Your API key has expired."
+
+        monkeypatch.setattr(chat_router, "get_chat_provider", lambda: Dead())
+        body = client.get("/advisor/health").json()
+        assert body["degraded"] is True
+        assert "expired" in body["reason"]

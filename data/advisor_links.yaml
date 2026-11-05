@@ -1,0 +1,13 @@
+# Curated links the advisor may point a student to when it cannot answer.
+# Attached by code (app/advisor/links.py), never produced by a model.
+# Every URL verified to load on 2026-11-04.
+links:
+  - name: "the Registrar's Office"
+    url: "https://www.morgan.edu/registrar"
+    intents: [unknown]
+  - name: "the Computer Science department"
+    url: "https://www.morgan.edu/scmns/computerscience"
+    intents: [unknown]
+  - name: "the Morgan State undergraduate catalog"
+    url: "https://catalog.morgan.edu/"
+    intents: [unknown]

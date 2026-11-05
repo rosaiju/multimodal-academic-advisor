@@ -72,6 +72,8 @@ class ChatResponse(BaseModel):
     model: str | None = None
     notice: str | None = None
     conversation_id: str
+    #: Curated links (never model-supplied) for questions the advisor cannot answer.
+    links: list[dict[str, str]] = []
 
 
 class AdvisorHealth(BaseModel):
@@ -175,6 +177,7 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         model=reply.model,
         notice=reply.notice,
         conversation_id=body.conversation_id,
+        links=[link.as_dict() for link in reply.links],
     )
 
 

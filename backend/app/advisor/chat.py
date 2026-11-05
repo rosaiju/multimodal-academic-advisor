@@ -24,11 +24,12 @@ import logging
 import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.advisor.answers import GroundedAnswer, Intent, deterministic_answer
 from app.advisor.consistency import allowed_codes, check_rephrasing, invented_codes
 from app.advisor.facts import AdvisorFacts, render_facts
+from app.advisor.links import Link, links_for
 from app.llm.chat import ChatProvider, ChatTurn, ProviderUnavailable, get_chat_provider
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,8 @@ class AdvisorReply:
     #: A model reply that failed the consistency check. Never shown to the student
     #: and not returned by the API; kept for logs and the live smoke test.
     discarded: str | None = None
+    #: Curated links (app/advisor/links.py) for answers the advisor cannot give.
+    links: list[Link] = field(default_factory=list)
 
 
 def _known_codes(facts: AdvisorFacts) -> set[str]:
@@ -205,6 +208,9 @@ def ask(
     conversation = conversations.get(student_id, conversation_id)
 
     def finish(reply: AdvisorReply) -> AdvisorReply:
+        # Links attach here, by intent, on every path - so a rephrased reply
+        # carries the same curated links and never a model-supplied one.
+        reply = replace(reply, links=links_for(reply.intent))
         conversation.add("user", question, keep=history_turns)
         conversation.add("assistant", reply.answer, keep=history_turns)
         return reply

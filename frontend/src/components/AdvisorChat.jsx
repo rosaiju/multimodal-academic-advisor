@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { askAdvisor, getAdvisorHealth, resetConversation } from '../api'
 import { useSpeaker } from './useSpeaker'
+import LiveVoicePanel from './LiveVoicePanel'
 import { Alert, Button, Card, Spinner } from './ui'
 import { useLiveTranscription } from './useLiveTranscription'
 
@@ -41,6 +42,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [health, setHealth] = useState(null)
   const [messages, setMessages] = useState([])
   const speaker = useSpeaker()
+  const [liveOpen, setLiveOpen] = useState(false)
   const [speakingIndex, setSpeakingIndex] = useState(null)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -322,6 +324,27 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
           </p>
         )}
       </Card>
+
+      {voiceOn && hasRecord && (
+        <Card
+          title="Talk to the advisor"
+          subtitle="A spoken conversation. Same answers as the chat, read aloud — talk over it to interrupt."
+          action={
+            <Button variant="ghost" onClick={() => setLiveOpen((open) => !open)}>
+              {liveOpen ? 'Close' : 'Open'}
+            </Button>
+          }
+        >
+          {liveOpen ? (
+            <LiveVoicePanel />
+          ) : (
+            <p className="text-sm text-slate-500">
+              Ask out loud and hear the answer. Course codes it isn't sure about are read back
+              to you first.
+            </p>
+          )}
+        </Card>
+      )}
 
       <p className="text-center text-xs text-slate-400">
         The advisor cannot clear you to graduate. Degree requirements are computed from

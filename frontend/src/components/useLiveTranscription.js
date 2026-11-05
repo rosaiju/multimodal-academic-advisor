@@ -107,7 +107,11 @@ export function useLiveTranscription({ onDone }) {
     setError(null)
     let stream
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Echo cancellation keeps the advisor's own voice (from the speakers) out of
+      // the mic - the first defense against it interrupting itself.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
     } catch {
       startingRef.current = false
       setError(MIC_BLOCKED)

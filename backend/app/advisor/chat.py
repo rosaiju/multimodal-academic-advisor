@@ -97,6 +97,9 @@ in person - warm, direct and encouraging, never vague:
 - On a follow-up, use the conversation: answer what they are actually asking now,
   not the earlier question again.
 
+Leave out any sentence about where the answer came from (for example "Every line
+above comes from the catalog..."): you are writing it, and the app labels that.
+
 Keep every fact, number and course code from the prepared answer, each with the
 same meaning - a percentage of progress stays a percentage of progress. You may
 reorder and reword. You may not add academic claims that are not in the facts block.
@@ -282,6 +285,25 @@ def _strip_reasoning(text: str) -> str:
     return text.strip()
 
 
+#: Engine sentences that say no language model wrote the text. True of the engine's
+#: answer, false once a model has rewritten it - seen live, copied by Gemini.
+_ENGINE_ONLY_CLAIM = re.compile(
+    r"\s*Every line above comes from [^.]*not from a language model's opinion\.", re.IGNORECASE
+)
+
+
+def _drop_engine_only_claims(text: str) -> str:
+    return _ENGINE_ONLY_CLAIM.sub("", text).strip()
+
+
+def _short_reason(exc: Exception) -> str:
+    """A provider error as one short line for the student: no response body."""
+    text = str(exc).split(": {", 1)[0].splitlines()[0].strip()
+    if "(503)" in text:
+        return "the model is busy right now (503)"
+    return text[:120]
+
+
 def _history_for_prompt(conversation: Conversation, question: str, keep: int) -> list[ChatTurn]:
     turns = list(conversation.turns[-keep * 2 :])
     turns.append(ChatTurn(role="user", content=question))
@@ -462,7 +484,7 @@ def ask(
         return finish(
             engine_answer(
                 "Answered from the degree engine. The language model could not be "
-                f"reached ({exc}).",
+                f"reached ({_short_reason(exc)}).",
                 fallback="model_unavailable",
                 seconds=round(time.perf_counter() - started, 2),
             )
@@ -479,7 +501,7 @@ def ask(
         )
 
     seconds = round(time.perf_counter() - started, 2)
-    text = _strip_reasoning(raw) if isinstance(raw, str) else ""
+    text = _drop_engine_only_claims(_strip_reasoning(raw)) if isinstance(raw, str) else ""
     problems = check_rephrasing(prepared, text, facts, question=asked, brief=live)
     if problems:
         logger.warning(

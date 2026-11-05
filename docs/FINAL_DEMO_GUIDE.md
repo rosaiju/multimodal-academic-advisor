@@ -118,3 +118,26 @@ Extra demo steps (checked 2026-11-04 on the running app, API + browser):
 
 Not verified: hands-free mode and barge-in with a real human voice and speakers (use
 headphones to stop the advisor's voice re-triggering the mic). Emmanuel's notes say the same.
+
+---
+
+## 7. Gemini writes the answers (branch `feature/gemini-advising`)
+
+Folder `C:\Users\rohan\advisor-ai-gemini`. Put the key in `backend\.env` as
+`GEMINI_API_KEY=...` (never commit it, never show the file). Then
+`.\scripts\start-demo.ps1` prints `Mode: Gemini writes the answers (checked by the engine)`.
+The backend window's first lines include
+`advisor answers: provider=gemini model=gemini-3.5-flash-lite api_key=loaded rephrase=on`.
+
+How an answer is made: Gemini reads the question and conversation (routing), the engine
+computes the facts and a prepared answer, Gemini writes the reply from those facts, and
+the consistency check compares it with the engine. Passed -> shown as **Written by Gemini
+· checked by the engine**. Failed -> discarded, engine answer shown as **Fallback ·
+Gemini's answer failed the fact check**. Google busy/down -> **Fallback · Gemini
+unavailable**. Crisis replies are fixed text and never go to Gemini.
+
+Live results (2026-11-05, fictional student, real Gemini calls): 8-question conversation
+via the API: 5 written by Gemini, 3 rejected by the check (dropped figures/codes);
+4 browser questions: all 4 written by Gemini; checker also caught Gemini calling two
+blocked courses (MATH242, MATH312) available. Google returned 503 "high demand" often;
+each is retried twice, then the engine answers.

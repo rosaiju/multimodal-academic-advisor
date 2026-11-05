@@ -38,8 +38,12 @@ class Settings(BaseSettings):
     anthropic_vision_model: str = "claude-sonnet-5"
     openai_chat_model: str = "gpt-4o-mini"
     openai_vision_model: str = "gpt-4o"
-    gemini_chat_model: str = "gemini-2.0-flash"
-    gemini_vision_model: str = "gemini-2.0-flash"
+    #: gemini-2.0-flash and gemini-2.5-flash are closed to new keys (404, checked
+    #: live 2026-11-05); the full flash models were overloaded (503) or returned
+    #: empty text after spending the budget on hidden thinking. The lite model
+    #: answered in about a second. Override with GEMINI_CHAT_MODEL.
+    gemini_chat_model: str = "gemini-3.5-flash-lite"
+    gemini_vision_model: str = "gemini-3.5-flash-lite"
 
     #: OpenRouter: one key, many models (including free ones). OpenAI-compatible.
     #: Safe with weak models: the model only rephrases, and check_rephrasing

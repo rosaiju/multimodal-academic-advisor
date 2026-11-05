@@ -165,10 +165,19 @@ class Walkthrough:
         self.nav("Ask the advisor")
         p.locator("#advisor-question").fill("What should I take next semester?")
         p.get_by_role("button", name="Ask", exact=True).click()
-        label = p.get_by_text("Computed by the engine")
-        expect(label.first).to_be_visible(timeout=60_000)
-        answer = p.locator("p.whitespace-pre-wrap").last.inner_text().strip()
-        assert len(answer) > 20, f"advisor answer looks empty: {answer!r}"
+        # Who wrote the answer depends on the mode: Gemini (checked by the engine),
+        # a fallback, or the engine alone. Any of them is a real answer; which one is
+        # printed so a run shows whether the model was actually used.
+        label = p.get_by_text(
+            re.compile(
+                r"^(Written by .+ · checked by the engine|Fallback · .+|Computed by the engine)$"
+            )
+        ).first
+        expect(label).to_be_visible(timeout=120_000)
+        print(f"      answer label: {label.inner_text()!r}")
+        turn = label.locator("xpath=ancestor::div[contains(@class, 'space-y-2')][1]")
+        answer = turn.inner_text().strip()
+        assert len(answer) > 40, f"advisor answer looks empty: {answer!r}"
 
     def explore(self):
         p = self.page

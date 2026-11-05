@@ -138,7 +138,7 @@ def test_gemini_http_error_falls_back(facts, server, monkeypatch) -> None:  # no
     Recorder.status, Recorder.body = 404, {"error": {"message": "model not found"}}
     reply = _ask(facts, _gemini(base, monkeypatch), sid="g11")
     assert reply.fallback == "model_unavailable"
-    assert "model not found" in (reply.notice or "")
+    assert "(404)" in (reply.notice or "")  # short reason, not the response body
 
 
 # --- configuration -------------------------------------------------------------
@@ -171,3 +171,67 @@ def test_startup_log_names_the_model_but_never_the_key(monkeypatch, caplog) -> N
     assert "advisor answers: provider=gemini" in logged
     assert "api_key=loaded" in logged
     assert "super-secret-test-key" not in logged
+
+
+# --- Gemini overload handling (seen live 2026-11-05) ------------------------------
+
+
+def _scripted_http(monkeypatch, outcomes):
+    """Replace the HTTP call with a script: an exception to raise or a dict to return."""
+    import app.llm.chat as llm
+
+    calls = []
+
+    def fake(url, payload, *, timeout, headers=None):
+        calls.append(url)
+        result = outcomes[len(calls) - 1]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(llm, "_http_json", fake)
+    monkeypatch.setattr(GeminiChatProvider, "RETRY_DELAYS", (0, 0))
+    return calls
+
+
+def test_gemini_503_is_retried_then_answers(monkeypatch) -> None:
+    from app.llm.chat import ChatTurn
+
+    busy = ProviderUnavailable('provider is failing (503): {"error": "high demand"}')
+    calls = _scripted_http(monkeypatch, [busy, gemini_reply("ok")])
+    provider = GeminiChatProvider("k", "m")
+    assert provider.complete(system="s", messages=[ChatTurn(role="user", content="q")]) == "ok"
+    assert len(calls) == 2
+
+
+def test_gemini_quota_error_is_not_retried(monkeypatch) -> None:
+    import pytest
+
+    from app.llm.chat import ChatTurn
+
+    quota = ProviderUnavailable("provider rejected the request (429): quota")
+    calls = _scripted_http(monkeypatch, [quota, gemini_reply("never")])
+    with pytest.raises(ProviderUnavailable):
+        GeminiChatProvider("k", "m").complete(
+            system="s", messages=[ChatTurn(role="user", content="q")]
+        )
+    assert len(calls) == 1
+
+
+def test_student_sees_a_short_reason_not_the_raw_error_body(facts, monkeypatch) -> None:
+    busy = ProviderUnavailable('provider is failing (503): {\n "error": {"code": 503}}')
+    _scripted_http(monkeypatch, [busy, busy, busy])
+    reply = _ask(facts, GeminiChatProvider("k", "m"), sid="g12")
+    assert reply.fallback == "model_unavailable"
+    assert "the model is busy right now (503)" in reply.notice
+    assert "{" not in reply.notice
+
+
+def test_model_answer_never_claims_no_model_wrote_it(facts) -> None:
+    """Seen live: Gemini copied the engine's 'not from a language model's opinion'."""
+    question = "Why is COSC220 recommended?"
+    prepared = deterministic_answer(facts, question).text
+    assert "not from a language model's opinion" in prepared  # the engine's own text
+    reply = _ask(facts, StubProvider(reply=prepared), question=question, sid="g13")
+    assert reply.source == "engine+llm"
+    assert "language model's opinion" not in reply.answer

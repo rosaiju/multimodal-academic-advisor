@@ -15,3 +15,5 @@
 | 11 | "Based on:" under advisor answers shows raw block ids (`major_required_courses`) | Cosmetic | Map citations to block names in AdvisorChat |
 | 12 | No Docker Compose or PostgreSQL in the repo (the mission brief assumed both) | Data is JSON files under `backend/accounts` and `backend/student_records`; fine for a demo | Only add if deployment is required |
 | 13 | Integration branch is local only | Teammates cannot see it until pushed | Push `integration/nov5-demo` and open a PR when approved |
+| 14 | Live voice (PR #16): hands-free and barge-in not tested with a human voice; echo may re-trigger the mic on speakers | Could interrupt itself mid-answer | Use headphones; test once before class |
+| 15 | Live voice relaxes the consistency check (`brief=True`): spoken summaries may omit codes and figures, still never invent or distort | Reviewer sign-off needed | Team review on PR #16 |

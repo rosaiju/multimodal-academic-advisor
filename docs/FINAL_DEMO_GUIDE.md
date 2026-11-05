@@ -98,3 +98,23 @@ Things the AI does that the engine alone cannot:
 | Mic not heard | Type the same question — same engine answer |
 | "Cannot reach the backend" | A server window was closed. Rerun `.\scripts\start-demo.ps1` |
 | Lands on Progress instead of Upload | That account already has a record — sign out, register a new address |
+
+---
+
+## 6. Combined branch with Emmanuel's live voice (PR #16)
+
+Branch `integration/nov5-demo-voice`, folder `C:\Users\rohan\advisor-ai-voice`. Same start:
+`cd C:\Users\rohan\advisor-ai-voice; .\scripts\start-demo.ps1`. Run only ONE folder's servers
+at a time (both use ports 8000/5173).
+
+Extra demo steps (checked 2026-11-04 on the running app, API + browser):
+
+| Do | Expected (as tested) |
+|---|---|
+| **Read aloud** under any advisor answer | Deepgram speaks it; real MP3 back in ~1.5 s |
+| **Talk to the advisor** → say "Can I take COSC 354?" | If speech confidence is low: "Did you mean COSC 354?" first. Confident: "For COSC 354: …" (not eligible, COSC220/COSC241 missing) |
+| Say "Should I take summer classes to graduate early?" | Honest answer: can't plan summer terms; 97 credits left; eligible courses; ask an advisor |
+| Say "Where do I park on campus?" | Declines, shows curated Morgan links (Registrar, CS dept, catalog) |
+
+Not verified: hands-free mode and barge-in with a real human voice and speakers (use
+headphones to stop the advisor's voice re-triggering the mic). Emmanuel's notes say the same.

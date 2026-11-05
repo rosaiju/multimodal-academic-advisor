@@ -1,0 +1,17 @@
+# Run the whole app with dekit (https://github.com/pvolok/dekit): `dekit up`.
+# Windows paths; on macOS/Linux use .venv/bin/python and plain `npm run dev`.
+tasks:
+  backend:
+    cwd: backend
+    # Through cmd /c so the relative venv path resolves from backend/.
+    cmd: ["cmd", "/c", '.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000']
+    ready: {http: "http://127.0.0.1:8000/health"}
+    autorestart: on-failure
+    autostart: true
+  frontend:
+    cwd: frontend
+    # npm is a .cmd on Windows, which dekit can't start directly yet.
+    cmd: ["cmd", "/c", "npm run dev"]
+    deps: [backend]
+    ready: {tcp: 5173}
+    autostart: true

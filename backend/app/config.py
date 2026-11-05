@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # --- LLM provider ---
     # Provider-neutral on purpose: the team applies for Anthropic AND OpenAI student
     # credits, then flips this one value to whichever came through.
-    llm_provider: Literal["anthropic", "openai", "gemini", "ollama"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "gemini", "ollama", "openrouter"] = "anthropic"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     openai_vision_model: str = "gpt-4o"
     gemini_chat_model: str = "gemini-2.0-flash"
     gemini_vision_model: str = "gemini-2.0-flash"
+
+    #: OpenRouter: one key, many models (including free ones). OpenAI-compatible.
+    #: Safe with weak models: the model only rephrases, and check_rephrasing
+    #: discards any rewording that changes a fact.
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_chat_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    openrouter_timeout_seconds: float = 45.0
 
     #: Ollama runs locally and needs no key, which makes it the fallback that
     #: works on a laptop with no credits at all. Availability is decided by
@@ -154,6 +162,7 @@ class Settings(BaseSettings):
             "openai": self.openai_api_key,
             "gemini": self.gemini_api_key,
             "ollama": "",
+            "openrouter": self.openrouter_api_key,
         }[self.llm_provider]
 
     @property
@@ -163,6 +172,7 @@ class Settings(BaseSettings):
             "openai": self.openai_chat_model,
             "gemini": self.gemini_chat_model,
             "ollama": self.ollama_chat_model,
+            "openrouter": self.openrouter_chat_model,
         }[self.llm_provider]
 
 

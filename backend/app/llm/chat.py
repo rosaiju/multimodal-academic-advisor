@@ -292,6 +292,48 @@ class OllamaChatProvider:
         return text
 
 
+class OpenRouterChatProvider:
+    """OpenRouter's OpenAI-compatible /chat/completions, over stdlib HTTP."""
+
+    provider_id = "openrouter"
+
+    def __init__(self, api_key: str, model: str, base_url: str, timeout: float = 45.0) -> None:
+        self.name = model
+        self._api_key = api_key
+        self._model = model
+        self._base = base_url.rstrip("/")
+        self._timeout = timeout
+
+    def available(self) -> tuple[bool, str]:
+        if not self._api_key:
+            return False, "OPENROUTER_API_KEY is not set"
+        return True, "configured"
+
+    def complete(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 800) -> str:
+        payload = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                *({"role": t.role, "content": t.content} for t in messages),
+            ],
+        }
+        data = _http_json(
+            f"{self._base}/chat/completions",
+            payload,
+            timeout=self._timeout,
+            headers={"Authorization": f"Bearer {self._api_key}"},
+        )
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            content = None
+        text = content.strip() if isinstance(content, str) else ""
+        if not text:
+            raise ProviderUnavailable("openrouter returned an empty completion")
+        return text
+
+
 def get_chat_provider(settings: Settings | None = None) -> ChatProvider:
     """Build the configured chat provider.
 
@@ -306,6 +348,13 @@ def get_chat_provider(settings: Settings | None = None) -> ChatProvider:
         return OpenAIChatProvider(settings.openai_api_key, settings.openai_chat_model)
     if provider == "gemini":
         return GeminiChatProvider(settings.gemini_api_key, settings.gemini_chat_model)
+    if provider == "openrouter":
+        return OpenRouterChatProvider(
+            settings.openrouter_api_key,
+            settings.openrouter_chat_model,
+            settings.openrouter_base_url,
+            settings.openrouter_timeout_seconds,
+        )
     return OllamaChatProvider(
         settings.ollama_base_url, settings.ollama_chat_model, settings.ollama_timeout_seconds
     )

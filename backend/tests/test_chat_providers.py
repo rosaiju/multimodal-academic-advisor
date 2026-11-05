@@ -25,6 +25,7 @@ from app.llm.chat import (
     ChatTurn,
     GeminiChatProvider,
     OllamaChatProvider,
+    OpenRouterChatProvider,
     ProviderUnavailable,
     get_chat_provider,
 )
@@ -334,3 +335,32 @@ class TestNetworkFailures:
         provider = OllamaChatProvider("http://127.0.0.1:1", "llama3.1", timeout=2)
         with pytest.raises(ProviderUnavailable, match="cannot reach"):
             provider.complete(system="s", messages=MESSAGES)
+
+
+class TestOpenRouterWireFormat:
+    def test_unavailable_without_a_key(self) -> None:
+        ok, reason = OpenRouterChatProvider("", "m", "http://x").available()
+        assert (ok, reason) == (False, "OPENROUTER_API_KEY is not set")
+
+    def test_posts_openai_shape(self, server) -> None:
+        httpd, base = server
+        Recorder.body = {"choices": [{"message": {"content": "  Take COSC 220. "}}]}
+        provider = OpenRouterChatProvider("or-key", "some/model:free", base)
+        assert provider.complete(system="SYSTEM", messages=MESSAGES) == "Take COSC 220."
+        assert Recorder.captured["path"] == "/chat/completions"
+        assert Recorder.captured["headers"]["authorization"] == "Bearer or-key"
+        sent = Recorder.captured["json"]
+        assert sent["model"] == "some/model:free"
+        assert sent["messages"][0] == {"role": "system", "content": "SYSTEM"}
+        assert sent["messages"][1] == {"role": "user", "content": MESSAGES[0].content}
+
+    def test_empty_completion_raises(self, server) -> None:
+        httpd, base = server
+        Recorder.body = {"choices": [{"message": {"content": ""}}]}
+        with pytest.raises(ProviderUnavailable):
+            OpenRouterChatProvider("k", "m", base).complete(system="s", messages=MESSAGES)
+
+    def test_get_chat_provider_openrouter(self) -> None:
+        settings = Settings(llm_provider="openrouter", openrouter_api_key="k")
+        assert isinstance(get_chat_provider(settings), OpenRouterChatProvider)
+        assert settings.chat_api_key == "k"

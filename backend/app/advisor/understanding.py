@@ -65,6 +65,7 @@ _DESCRIPTIONS: dict[Intent, str] = {
     Intent.PLAN_SEMESTERS: "plan remaining semesters, or when they can graduate",
     Intent.COMPARE: "compare two or more courses",
     Intent.EXPLAIN_REQUIREMENT: "why a course does not count or a requirement is unmet",
+    Intent.GRADUATE_EARLY: "summer classes, or finishing/graduating early or sooner",
     Intent.UNKNOWN: "anything else (professors, parking, dorms...)",
 }
 

@@ -366,3 +366,12 @@ def test_rephrase_off_with_keyword_routing_says_engine_only(facts) -> None:
     assert reply.source == "engine"
     assert "language model read" not in reply.notice
     assert "switched off" in reply.notice
+
+
+def test_every_model_intent_has_a_description() -> None:
+    """A route the prompt cannot describe would raise while building the prompt and
+    silently drop every question back to keywords (seen when PR #16 added
+    GRADUATE_EARLY next to this module)."""
+    from app.advisor.understanding import _DESCRIPTIONS, MODEL_INTENTS
+
+    assert set(MODEL_INTENTS) <= set(_DESCRIPTIONS)

@@ -40,6 +40,7 @@ export default function SemesterPlanner({ studentId }) {
   const [checkError, setCheckError] = useState(null)
   const [dragging, setDragging] = useState(null)
   const checkSeq = useRef(0)
+  const planSeq = useRef(0)
 
   const check = useCallback(
     async (next, target) => {
@@ -59,6 +60,11 @@ export default function SemesterPlanner({ studentId }) {
   )
 
   async function generate() {
+    // A new plan replaces the layout, so drop answers still on their way: an older
+    // plan (React's dev StrictMode plans twice on arrival) or a check of an edit to
+    // the layout being replaced. Either would show results for a layout not on screen.
+    const seq = ++planSeq.current
+    checkSeq.current++
     setLoading(true)
     setError(null)
     setCheckError(null)
@@ -67,6 +73,7 @@ export default function SemesterPlanner({ studentId }) {
         credit_target: creditTarget,
         include_summer: includeSummer,
       })
+      if (seq !== planSeq.current) return
       setPlan(result)
       setTerms(
         result.terms.map((t) => ({
@@ -82,9 +89,9 @@ export default function SemesterPlanner({ studentId }) {
       )
       setIssues([])
     } catch (err) {
-      setError(err.message)
+      if (seq === planSeq.current) setError(err.message)
     } finally {
-      setLoading(false)
+      if (seq === planSeq.current) setLoading(false)
     }
   }
 

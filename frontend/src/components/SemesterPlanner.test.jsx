@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -80,6 +81,56 @@ describe('SemesterPlanner', () => {
     expect(
       within(spring).getByText('COSC352 needs COSC220 finished in an earlier term.'),
     ).toBeInTheDocument()
+  })
+
+  it('ignores a check that comes back after the plan was re-generated', async () => {
+    // Seen in the browser walkthrough: a move's check landed after a fresh plan had
+    // replaced the layout, so the page said "1 problem" with no course in red.
+    const user = userEvent.setup()
+    generateSchedule.mockResolvedValue(PLAN)
+    let answerCheck
+    validateSchedule.mockReturnValue(new Promise((resolve) => (answerCheck = resolve)))
+    render(<SemesterPlanner studentId="s1" />)
+
+    const fall = await screen.findByRole('region', { name: 'Fall 2027' })
+    await user.selectOptions(within(fall).getByRole('combobox'), 'Spring 2027')
+    await user.click(screen.getByRole('button', { name: 'Re-generate' }))
+    expect(await screen.findByRole('button', { name: 'Re-generate' })).toBeEnabled()
+
+    answerCheck({
+      valid: false,
+      issues: [
+        {
+          severity: 'error',
+          term: 'Spring 2027',
+          course: 'COSC352',
+          message: 'COSC352 needs COSC220 finished in an earlier term.',
+        },
+      ],
+    })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByText(/problem with this layout/)).not.toBeInTheDocument()
+  })
+
+  it('keeps only the newest plan when two plan requests overlap', async () => {
+    // React's development StrictMode (what `npm run dev` serves) runs the
+    // plan-on-arrival effect twice, so two plan requests are in flight at once.
+    let first
+    generateSchedule
+      .mockReturnValueOnce(new Promise((resolve) => (first = resolve)))
+      .mockResolvedValueOnce(PLAN)
+    render(
+      <StrictMode>
+        <SemesterPlanner studentId="s1" />
+      </StrictMode>,
+    )
+    expect(generateSchedule).toHaveBeenCalledTimes(2)
+    expect(await screen.findByRole('region', { name: 'Fall 2027' })).toBeInTheDocument()
+
+    first({ ...PLAN, terms: [{ term: 'Spring 2030', courses: [course('COSC999')] }] })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByRole('region', { name: 'Spring 2030' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Fall 2027' })).toBeInTheDocument()
   })
 
   it('shows a friendly error with a retry when planning fails', async () => {

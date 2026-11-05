@@ -91,6 +91,11 @@ class ChatResponse(BaseModel):
     links: list[dict[str, str]] = []
     #: Set instead of an answer when a live turn needs a course code confirmed.
     clarification: Clarification | None = None
+    #: Live voice: the engine's full answer when the spoken one is a model
+    #: summary, so "the rest is on your screen" is true.
+    details: str | None = None
+    #: Live voice: speak the whole answer (the student asked for all of it).
+    read_in_full: bool = False
 
 
 class AdvisorHealth(BaseModel):
@@ -226,6 +231,12 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         notice=reply.notice,
         conversation_id=body.conversation_id,
         links=[link.as_dict() for link in reply.links],
+        details=(
+            reply.prepared
+            if body.mode == "live" and reply.source == "engine+llm" and reply.prepared
+            else None
+        ),
+        read_in_full=reply.read_in_full,
     )
 
 

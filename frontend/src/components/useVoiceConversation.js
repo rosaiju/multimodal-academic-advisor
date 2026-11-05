@@ -103,9 +103,10 @@ export function useVoiceConversation({
       setState('speaking')
       if (handsFreeRef.current) liveRef.current?.start() // listen during playback: barge-in
       // A model summary (engine+llm) is already short; an engine answer is cut down
-      // for speech by the backend's deterministic brief pass. The screen shows it all.
+      // for speech by the backend's deterministic brief pass - unless the student
+      // asked for all of it ("list them all"). The screen shows it all either way.
       await speakerRef.current.speak(reply.answer, reply.links ?? [], {
-        brief: reply.source !== 'engine+llm',
+        brief: reply.source !== 'engine+llm' && !reply.read_in_full,
         onStart: (seconds) =>
           patch({
             pending: false,

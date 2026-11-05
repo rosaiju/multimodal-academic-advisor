@@ -26,7 +26,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 
-from app.advisor.answers import GroundedAnswer, Intent, deterministic_answer
+from app.advisor.answers import GroundedAnswer, Intent, detect_intent, deterministic_answer
 from app.advisor.consistency import allowed_codes, check_rephrasing, invented_codes
 from app.advisor.facts import AdvisorFacts, render_facts
 from app.advisor.links import Link, links_for
@@ -109,6 +109,15 @@ instead of reading them out."""
 )
 
 
+#: "Could you list out the full list?" / "list them all": a follow-up asking for
+#: everything the last answer had. It names no topic, so it reuses the last one.
+_LIST_ALL = re.compile(
+    r"\b(full|whole|entire|complete) list\b"
+    r"|\blist (them|it|those|these|everything|all)\b"
+    r"|\ball of (them|those|these)\b"
+    r"|\b(read|tell|say|name|give) (me )?(them|those|these|everything) all\b"
+)
+
 #: Prefixed to a spoken reply the student talked over.
 INTERRUPTED_NOTE = "[The student interrupted this reply, so they may not have heard all of it.]"
 
@@ -119,6 +128,8 @@ class Conversation:
 
     turns: list[ChatTurn] = field(default_factory=list)
     updated_at: float = field(default_factory=time.time)
+    #: The last question the engine could answer, for "list them all".
+    last_question: str | None = None
 
     def add(self, role: str, content: str, *, keep: int) -> None:
         self.turns.append(ChatTurn(role=role, content=content))  # type: ignore[arg-type]
@@ -208,6 +219,9 @@ class AdvisorReply:
     discarded: str | None = None
     #: Curated links (app/advisor/links.py) for answers the advisor cannot give.
     links: list[Link] = field(default_factory=list)
+    #: Live voice: the student asked for everything, so speak the whole answer
+    #: instead of the brief cut.
+    read_in_full: bool = False
 
 
 def _known_codes(facts: AdvisorFacts) -> set[str]:
@@ -254,18 +268,31 @@ def ask(
 ) -> AdvisorReply:
     """Answer one question. Never raises for a provider problem."""
     question = question.strip()
-    prepared: GroundedAnswer = deterministic_answer(facts, question)
     conversation = conversations.get(student_id, conversation_id)
+    # "List them all" names no topic: answer the last question again, in full.
+    asked = question
+    read_in_full = False
+    if (
+        conversation.last_question
+        and detect_intent(question) is Intent.UNKNOWN
+        and _LIST_ALL.search(question.lower())
+    ):
+        asked = conversation.last_question
+        read_in_full = live
+    prepared: GroundedAnswer = deterministic_answer(facts, asked)
 
     def finish(reply: AdvisorReply) -> AdvisorReply:
         # Links attach here, by intent, on every path - so a rephrased reply
         # carries the same curated links and never a model-supplied one.
-        reply = replace(reply, links=links_for(reply.intent))
+        reply = replace(reply, links=links_for(reply.intent), read_in_full=read_in_full)
+        if prepared.intent not in (Intent.UNKNOWN, Intent.NO_RECORD):
+            conversation.last_question = asked
         conversation.add("user", question, keep=history_turns)
         # Live voice: remember what was SPOKEN. An engine answer is cut down for
-        # speech (speakable.brief_text); a model summary is spoken as written.
+        # speech (speakable.brief_text) unless the student asked for all of it;
+        # a model summary is spoken as written.
         heard = reply.answer
-        if live and reply.source != "engine+llm":
+        if live and reply.source != "engine+llm" and not read_in_full:
             heard = brief_text(reply.answer)
         conversation.add("assistant", heard, keep=history_turns)
         return reply
@@ -297,7 +324,8 @@ def ask(
 
     # Nothing to rephrase against: with no record, the deterministic text already
     # says the right thing and a model could only pad it.
-    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD:
+    # Asked aloud for everything: the engine's whole answer, not another summary.
+    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD or read_in_full:
         return finish(base)
 
     provider = provider or get_chat_provider()
@@ -340,7 +368,7 @@ def ask(
         )
 
     text = _strip_reasoning(raw) if isinstance(raw, str) else ""
-    problems = check_rephrasing(prepared, text, facts, question=question, brief=live)
+    problems = check_rephrasing(prepared, text, facts, question=asked, brief=live)
     if problems:
         logger.warning("discarding model answer: %s", "; ".join(problems))
         return finish(

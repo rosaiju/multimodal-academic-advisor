@@ -75,6 +75,18 @@ describe('useVoiceConversation', () => {
     expect(speaker.speak).toHaveBeenCalledWith('You have 7 left.', [], expect.objectContaining({ brief: false }))
   })
 
+  it('"list them all" is read in full, not cut down', async () => {
+    askAdvisor.mockResolvedValue(reply('All 5 blocks...', { read_in_full: true }))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
+    act(() => result.current.start())
+    await say('could you list out the full list')
+    expect(speaker.speak).toHaveBeenCalledWith(
+      'All 5 blocks...',
+      [],
+      expect.objectContaining({ brief: false }),
+    )
+  })
+
   it('hands-free returns to listening after speaking', async () => {
     askAdvisor.mockResolvedValue(reply('ok'))
     const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))

@@ -70,3 +70,19 @@ describe('AdvisorTurn markdown', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 })
+
+describe('AdvisorTurn full answer', () => {
+  it('shows the full engine answer under a spoken summary', () => {
+    const spoken = {
+      ...reply,
+      links: [],
+      source: 'engine+llm',
+      answer: 'You need 97 credits; the full list is on your screen.',
+      details: 'You still need:\n- COSC220\n- MATH241',
+    }
+    const { container } = render(<AdvisorTurn reply={spoken} />)
+    expect(screen.getByText('Full answer')).toBeInTheDocument()
+    expect(container.querySelector('details[open]')).not.toBeNull()
+    expect(container.querySelectorAll('details li')).toHaveLength(2)
+  })
+})

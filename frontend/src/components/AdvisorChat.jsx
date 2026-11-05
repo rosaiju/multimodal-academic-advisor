@@ -494,6 +494,18 @@ export function AdvisorTurn({ reply, onSpeak, speaking = false, pending = false,
           </div>
         </div>
 
+        {reply.details && (
+          // Voice: the reply above is the spoken summary; this is what it points to.
+          <details open className="rounded-xl border border-slate-200 px-4 py-2.5">
+            <summary className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-700">
+              Full answer
+            </summary>
+            <div className="mt-2 text-sm leading-relaxed text-slate-700">
+              <AnswerMarkdown text={reply.details} />
+            </div>
+          </details>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 px-1">
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${

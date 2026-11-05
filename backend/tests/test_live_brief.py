@@ -222,3 +222,64 @@ def test_curly_apostrophe_refusal_still_counts_as_refusal(facts) -> None:  # noq
     prepared = deterministic_answer(facts, "can I get a parking permit?")
     text = "I won’t guess about parking. The catalog is still partial, so ask an advisor."
     assert check_rephrasing(prepared, text, facts, brief=True) == []
+
+
+# --- "it's on your screen" must be true, and "list them all" must list them ------
+
+from app.advisor.chat import AdvisorReply  # noqa: E402
+from tests.test_advisor_workflow import confirm, uploaded  # noqa: E402,F401 - fixture
+
+LIST_ALL = "Could you list out the full list?"
+
+
+def test_live_summary_response_carries_the_full_answer(client, monkeypatch) -> None:
+    summary = AdvisorReply(
+        answer="Short.",
+        intent=Intent.REMAINING_REQUIREMENTS,
+        source="engine+llm",
+        grounded=True,
+        citations=[],
+        prepared="Full list:\n- COSC220",
+    )
+    monkeypatch.setattr(chat_router, "ask", lambda *a, **k: summary)
+    live = client.post("/advisor/chat", json={"message": "what's left", "mode": "live"}).json()
+    assert live["details"] == "Full list:\n- COSC220"
+    typed = client.post("/advisor/chat", json={"message": "what's left"}).json()
+    assert typed["details"] is None  # typed chat shows the full rephrasing already
+
+
+def test_list_all_follow_up_answers_the_previous_question(facts) -> None:  # noqa: F811
+    ask(facts, REMAINING, student_id="f1", conversation_id="live", live=True, use_llm=False)
+    reply = ask(
+        facts,
+        LIST_ALL,
+        student_id="f1",
+        conversation_id="live",
+        live=True,
+        provider=StubProvider(reply="I can't list that out."),
+    )
+    full = deterministic_answer(facts, REMAINING).text
+    assert reply.intent is Intent.REMAINING_REQUIREMENTS
+    assert reply.answer == full  # the engine's whole answer, not a model summary
+    assert reply.read_in_full
+    assert _last_assistant("f1", "live") == full  # history: they heard all of it
+
+
+def test_list_all_follow_up_in_typed_chat_uses_previous_question(facts) -> None:  # noqa: F811
+    ask(facts, NEXT, student_id="f2", use_llm=False)
+    reply = ask(facts, "list them all", student_id="f2", use_llm=False)
+    assert reply.intent is Intent.NEXT_SEMESTER
+    assert not reply.read_in_full
+
+
+def test_list_all_with_nothing_before_it_is_still_unknown(facts) -> None:  # noqa: F811
+    reply = ask(facts, "list them all", student_id="f3", use_llm=False)
+    assert reply.intent is Intent.UNKNOWN
+
+
+def test_chat_route_reports_read_in_full(client, uploaded) -> None:  # noqa: F811
+    confirm(client, uploaded)
+    body = {"mode": "live", "use_llm": False, "conversation_id": "lf"}
+    client.post("/advisor/chat", json={**body, "message": "what do I still need to graduate"})
+    out = client.post("/advisor/chat", json={**body, "message": LIST_ALL}).json()
+    assert out["read_in_full"] is True

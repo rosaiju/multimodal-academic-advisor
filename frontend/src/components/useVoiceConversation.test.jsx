@@ -174,4 +174,23 @@ describe('useVoiceConversation', () => {
     expect(askAdvisor).toHaveBeenCalledTimes(1)
     expect(result.current.state).toBe('speaking')
   })
+
+  it('the question after a barge-in tells the server the reply was interrupted', async () => {
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result, rerender } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    expect(askAdvisor).toHaveBeenLastCalledWith(expect.objectContaining({ interrupted: false }))
+    live.liveText = 'wait what about summer'
+    await act(async () => rerender())
+    await say('wait what about summer')
+    expect(askAdvisor).toHaveBeenLastCalledWith(expect.objectContaining({ interrupted: true }))
+    await say('ok and next semester')
+    expect(askAdvisor).toHaveBeenLastCalledWith(expect.objectContaining({ interrupted: false }))
+  })
+
+  it('asks the listener for live (short-pause) sessions', () => {
+    renderHook(() => useVoiceConversation({ handsFree: true }))
+    expect(useLiveTranscription).toHaveBeenCalledWith(expect.objectContaining({ live: true }))
+  })
 })

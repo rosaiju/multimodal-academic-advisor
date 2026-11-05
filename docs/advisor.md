@@ -375,3 +375,42 @@ load). Set `OLLAMA_TIMEOUT_SECONDS` above the default 60 for a demo.
 - A figure copied from elsewhere in the facts block with the wrong meaning is
   only caught for credit figures and the progress percentage.
 - Titles are only checked for courses the facts block names with a title.
+
+## Live voice conversation
+
+The "Talk to the advisor" panel (`useVoiceConversation.js`) sends each spoken turn
+to `POST /advisor/chat` with `mode: "live"`. Live mode differs from typed chat in
+four ways, and nowhere else:
+
+- **Short answers.** The model gets `LIVE_PROMPT` (summarize in two or three
+  sentences, keep every caveat; the full answer is on screen) and is checked with
+  `check_rephrasing(brief=True)`, which allows leaving out course codes and credit
+  figures but still rejects anything invented or distorted, and any dropped caveat,
+  blocker or refusal. When no model answer ships, `speakable.brief_text` speaks the
+  engine's headline, at most three items, and always: a "not eligible yet" verdict
+  (first), the "not yet eligible" section, an irregular-offering warning, and the
+  partial-catalog caveat.
+- **History is what was heard.** Live turns store the spoken text, not the full
+  written answer, and a reply the student talked over is marked
+  `[The student interrupted this reply ...]` (sent as `interrupted: true` with the
+  next question).
+- **Read-back** of uncertain course codes before answering.
+- **Live turn-ending.** `live_pause_ms` (2000) instead of dictation's
+  `speech_pause_ms` (5000).
+
+### Live turn-ending: how 2000 ms was chosen
+
+Measured on 2026-11-04 against real Deepgram (`nova-3`, `endpointing=300`): two
+questions synthesized by Aura in fragments, joined by silent gaps, streamed in
+real time. "Cut off" means `UtteranceEnd` fired inside a gap.
+
+| `utterance_end_ms` | 0.7 s gap | 1.0 s gap | 1.4 s gap | 2.0 s gap |
+|---|---|---|---|---|
+| 1000 | ok | cut (1 of 2) | cut | cut |
+| 1500 | ok | ok | cut (1 of 2) | cut |
+| 2000 | ok | ok | ok | cut |
+
+2000 ms survives mid-question pauses up to about 1.4 s and answers about 2 s after
+the student stops. **Limit:** these are synthesized pauses, not real hesitation
+("um", trailing off), which Deepgram may treat differently; tune
+`LIVE_PAUSE_MS` after testing with real students.

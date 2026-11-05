@@ -29,6 +29,7 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
   const activeRef = useRef(false)
   const turnRef = useRef(0) // bumps on every new turn, barge-in and end: stale work checks it
   const pendingRef = useRef(null) // { question, clarification } awaiting "yes"
+  const interruptedRef = useRef(false) // the student talked over the last reply
   const handsFreeRef = useRef(handsFree)
   const liveRef = useRef(null)
   const speaker = useSpeaker()
@@ -65,7 +66,15 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
       setState('thinking')
       let reply
       try {
-        reply = await askAdvisor({ message: question, conversationId, mode: 'live', confidence })
+        const interrupted = interruptedRef.current
+        interruptedRef.current = false
+        reply = await askAdvisor({
+          message: question,
+          conversationId,
+          mode: 'live',
+          confidence,
+          interrupted,
+        })
       } catch (error) {
         reply = { answer: `I couldn't reach the advisor: ${error.message}`, source: 'error', links: [] }
       }
@@ -123,7 +132,7 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
     setState('idle')
   }, [setState])
 
-  const live = useLiveTranscription({ onDone, onFail })
+  const live = useLiveTranscription({ onDone, onFail, live: true })
   useEffect(() => {
     liveRef.current = live
   })
@@ -132,6 +141,7 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
   useEffect(() => {
     if (stateRef.current === 'speaking' && REAL_WORDS.test(live.liveText ?? '')) {
       turnRef.current++
+      interruptedRef.current = true // the next question tells the server
       setState('listening')
       speakerRef.current.stop()
     }

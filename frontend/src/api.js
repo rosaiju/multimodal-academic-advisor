@@ -147,6 +147,7 @@ export function askAdvisor({
   useLlm = true,
   mode = 'text',
   confidence = null,
+  interrupted = false,
 }) {
   return request('/advisor/chat', {
     method: 'POST',
@@ -157,6 +158,7 @@ export function askAdvisor({
       use_llm: useLlm,
       mode,
       ...(confidence == null ? {} : { confidence }),
+      ...(interrupted ? { interrupted: true } : {}),
     }),
   })
 }

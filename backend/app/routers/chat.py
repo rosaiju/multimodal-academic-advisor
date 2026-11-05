@@ -70,6 +70,8 @@ class ChatRequest(BaseModel):
     #: "live" = a hands-free voice turn, sent without the student reviewing the
     #: transcript. Such turns are read back ("Did you mean COSC 241?") when unsure.
     mode: Literal["text", "live"] = "text"
+    #: Live mode: the student talked over the previous spoken reply.
+    interrupted: bool = False
     #: The live transcript's confidence, 0-1. Only read in live mode.
     confidence: float | None = Field(default=None, ge=0, le=1)
 
@@ -166,6 +168,8 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
 
     catalog_codes = [c.code for p in registry.list_programs() for c in p.courses]
     if body.mode == "live":
+        if body.interrupted:
+            conversations.mark_interrupted(student_id, body.conversation_id)
         context = subjects_in(
             conversations.recent_text(student_id, body.conversation_id), catalog_codes
         )

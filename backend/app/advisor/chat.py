@@ -31,6 +31,7 @@ from app.advisor.consistency import allowed_codes, check_rephrasing, invented_co
 from app.advisor.facts import AdvisorFacts, render_facts
 from app.advisor.links import Link, links_for
 from app.llm.chat import ChatProvider, ChatTurn, ProviderUnavailable, get_chat_provider
+from app.speech.speakable import brief_text
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,16 @@ change the student's registration decision or misrepresent a course's status.
 
 For every fact you include, preserve its meaning and reproduce numbers and course
 codes exactly. Use only the verified facts. If the necessary caveats require a
-longer answer, prioritize accuracy over brevity. No lists, headings or markdown."""
+longer answer, prioritize accuracy over brevity. No lists, headings or markdown.
+
+The student can see the full prepared answer on their screen while you speak. Name
+at most three courses or requirements; for the rest, say they are on the screen
+instead of reading them out."""
 )
+
+
+#: Prefixed to a spoken reply the student talked over.
+INTERRUPTED_NOTE = "[The student interrupted this reply, so they may not have heard all of it.]"
 
 
 @dataclass
@@ -129,6 +138,21 @@ class ConversationStore:
         """What was said lately, without creating a conversation to find out."""
         found = self._data.get((student_id, conversation_id))
         return " ".join(turn.content for turn in found.turns) if found else ""
+
+    def mark_interrupted(self, student_id: str, conversation_id: str) -> None:
+        """The student talked over the last spoken reply: say so in history, so
+        the model does not assume they heard all of it. Idempotent."""
+        found = self._data.get((student_id, conversation_id))
+        if not found:
+            return
+        for i in range(len(found.turns) - 1, -1, -1):
+            turn = found.turns[i]
+            if turn.role == "assistant":
+                if not turn.content.startswith(INTERRUPTED_NOTE):
+                    found.turns[i] = ChatTurn(
+                        role="assistant", content=f"{INTERRUPTED_NOTE} {turn.content}"
+                    )
+                return
 
     def get(self, student_id: str, conversation_id: str) -> Conversation:
         key = (student_id, conversation_id)
@@ -234,7 +258,12 @@ def ask(
         # carries the same curated links and never a model-supplied one.
         reply = replace(reply, links=links_for(reply.intent))
         conversation.add("user", question, keep=history_turns)
-        conversation.add("assistant", reply.answer, keep=history_turns)
+        # Live voice: remember what was SPOKEN. An engine answer is cut down for
+        # speech (speakable.brief_text); a model summary is spoken as written.
+        heard = reply.answer
+        if live and reply.source != "engine+llm":
+            heard = brief_text(reply.answer)
+        conversation.add("assistant", heard, keep=history_turns)
         return reply
 
     base = AdvisorReply(

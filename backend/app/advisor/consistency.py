@@ -248,6 +248,8 @@ def check_rephrasing(
 
     problems: list[str] = []
     subjects = facts.catalog_subjects
+    # Models often write curly apostrophes ("won’t"); the patterns expect straight ones.
+    text = text.replace("’", "'").replace("‘", "'")
 
     if not text.strip():
         return ["the rephrasing was empty"]

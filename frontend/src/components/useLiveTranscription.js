@@ -23,7 +23,7 @@ const CHUNK_MS = 250
  * - Tracks are released on every ending, including unmount, so the browser's
  *   recording indicator always goes away.
  */
-export function useLiveTranscription({ onDone, onFail }) {
+export function useLiveTranscription({ onDone, onFail, live = false }) {
   const supported =
     typeof window !== 'undefined' &&
     typeof window.MediaRecorder !== 'undefined' &&
@@ -140,7 +140,8 @@ export function useLiveTranscription({ onDone, onFail }) {
     setListening(true)
 
     socket.onopen = () => {
-      socket.send(JSON.stringify({ type: 'start', token: getAccessToken() }))
+      // live: the hands-free conversation, which ends a turn on a shorter pause.
+      socket.send(JSON.stringify({ type: 'start', token: getAccessToken(), live }))
     }
     socket.onmessage = (event) => {
       let message
@@ -166,7 +167,7 @@ export function useLiveTranscription({ onDone, onFail }) {
     }
     // Closing without `done` - server restart, network drop, error.
     socket.onclose = () => finish(null, UNAVAILABLE)
-  }, [supported, finish, beginRecording])
+  }, [supported, finish, beginRecording, live])
 
   const stop = useCallback(() => {
     const socket = socketRef.current

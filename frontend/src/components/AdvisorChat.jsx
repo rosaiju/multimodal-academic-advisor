@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { askAdvisor, getAdvisorHealth, resetConversation } from '../api'
+import { useSpeaker } from './useSpeaker'
+import LiveVoicePanel from './LiveVoicePanel'
 import { Alert, Button, Card, Spinner } from './ui'
 import { useLiveTranscription } from './useLiveTranscription'
 
@@ -39,6 +41,9 @@ function mergeDraft(current, spoken) {
 export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   const [health, setHealth] = useState(null)
   const [messages, setMessages] = useState([])
+  const speaker = useSpeaker()
+  const [liveOpen, setLiveOpen] = useState(false)
+  const [speakingIndex, setSpeakingIndex] = useState(null)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -188,7 +193,16 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
                 </p>
               </div>
             ) : (
-              <AdvisorTurn key={i} reply={message} />
+              <AdvisorTurn
+                key={i}
+                reply={message}
+                speaking={speaker.speaking && speakingIndex === i}
+                onSpeak={() => {
+                  if (speaker.speaking && speakingIndex === i) return speaker.stop()
+                  setSpeakingIndex(i)
+                  speaker.speak(message.answer, message.links ?? [])
+                }}
+              />
             ),
           )}
 
@@ -311,6 +325,27 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
         )}
       </Card>
 
+      {voiceOn && hasRecord && (
+        <Card
+          title="Talk to the advisor"
+          subtitle="A spoken conversation. Same answers as the chat, read aloud — talk over it to interrupt."
+          action={
+            <Button variant="ghost" onClick={() => setLiveOpen((open) => !open)}>
+              {liveOpen ? 'Close' : 'Open'}
+            </Button>
+          }
+        >
+          {liveOpen ? (
+            <LiveVoicePanel />
+          ) : (
+            <p className="text-sm text-slate-500">
+              Ask out loud and hear the answer. Course codes it isn't sure about are read back
+              to you first.
+            </p>
+          )}
+        </Card>
+      )}
+
       <p className="text-center text-xs text-slate-400">
         The advisor cannot clear you to graduate. Degree requirements are computed from
         the encoded catalog, which is still partial — confirm with your advisor.
@@ -319,8 +354,8 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   )
 }
 
-/** One advisor answer, with its provenance label and any notice. */
-function AdvisorTurn({ reply }) {
+/** One advisor answer, with its provenance label, links, and any notice. */
+export function AdvisorTurn({ reply, onSpeak, speaking = false }) {
   const fromModel = reply.source === 'engine+llm'
   return (
     <div className="flex justify-start">
@@ -367,6 +402,33 @@ function AdvisorTurn({ reply }) {
             </span>
           )}
         </div>
+
+        {reply.links?.length > 0 && (
+          <ul className="space-y-1 px-1 text-sm">
+            {reply.links.map((link) => (
+              <li key={link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-700 underline hover:text-indigo-900"
+                >
+                  {link.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {onSpeak && (
+          <button
+            type="button"
+            onClick={onSpeak}
+            className="px-1 text-xs font-medium text-slate-500 hover:text-slate-800"
+          >
+            {speaking ? 'Stop reading' : 'Read aloud'}
+          </button>
+        )}
 
         {reply.notice && <p className="px-1 text-xs italic text-slate-400">{reply.notice}</p>}
       </div>

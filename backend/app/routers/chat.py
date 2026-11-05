@@ -10,13 +10,14 @@ hands it to `app.advisor`, and shapes the reply.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.advisor.chat import AdvisorReply, ask, conversations
 from app.advisor.facts import build_facts
+from app.advisor.links import Link
 from app.auth.dependencies import CurrentUser
 from app.catalog.loader import CatalogError
 from app.catalog.registry import registry
@@ -25,10 +26,17 @@ from app.ingestion.store import RecordStore, StoredRecordError
 from app.llm.chat import get_chat_provider
 from app.speech import registry as speech_registry
 from app.speech.base import SpeechError
-from app.speech.clarify import subjects_in, suggest_clarifications
+from app.speech.clarify import (
+    named_courses,
+    readback_question,
+    subjects_in,
+    suggest_clarifications,
+)
 from app.speech.course_codes import normalize_course_mentions
 from app.speech.keyterms import spoken_course_codes
 from app.speech.registry import transcribe
+from app.speech.speakable import to_speech
+from app.speech.tts import synthesize
 
 router = APIRouter(prefix="/advisor", tags=["advisor"])
 
@@ -59,6 +67,13 @@ class ChatRequest(BaseModel):
     #: Set false to see the raw engine answer with no model involved. The UI uses
     #: it for a "show me the deterministic answer" toggle during the demo.
     use_llm: bool = True
+    #: "live" = a hands-free voice turn, sent without the student reviewing the
+    #: transcript. Such turns are read back ("Did you mean COSC 241?") when unsure.
+    mode: Literal["text", "live"] = "text"
+    #: Live mode: the student talked over the previous spoken reply.
+    interrupted: bool = False
+    #: The live transcript's confidence, 0-1. Only read in live mode.
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class ChatResponse(BaseModel):
@@ -75,6 +90,10 @@ class ChatResponse(BaseModel):
     #: "model" when a language model chose which engine answer this question
     #: gets, "keywords" when keyword routing did. The answer is the engine's either way.
     understood_by: str = "keywords"
+    #: Curated links (never model-supplied) for questions the advisor cannot answer.
+    links: list[dict[str, str]] = []
+    #: Set instead of an answer when a live turn needs a course code confirmed.
+    clarification: Clarification | None = None
 
 
 class AdvisorHealth(BaseModel):
@@ -122,6 +141,10 @@ def advisor_health() -> AdvisorHealth:
     running on the engine alone. For Ollama this genuinely probes the server."""
     provider = get_chat_provider()
     available, reason = provider.available()
+    # A key that is set can still be dead (expired, revoked): ask the provider.
+    probe = getattr(provider, "probe", None)
+    if available and probe is not None:
+        available, reason = probe()
     return AdvisorHealth(
         provider=provider.provider_id,
         model=provider.name,
@@ -146,6 +169,27 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
     student_id = user.student_id
     facts = None
 
+    catalog_codes = [c.code for p in registry.list_programs() for c in p.courses]
+    if body.mode == "live":
+        if body.interrupted:
+            conversations.mark_interrupted(student_id, body.conversation_id)
+        context = subjects_in(
+            conversations.recent_text(student_id, body.conversation_id), catalog_codes
+        )
+        confidence = 1.0 if body.confidence is None else body.confidence
+        if question := readback_question(body.message, confidence, catalog_codes, context):
+            # Ask back instead of answering: a misheard code must never be
+            # answered aloud as if it were fact. The advisor is not called.
+            return ChatResponse(
+                answer=question.question,
+                intent="readback",
+                source="readback",
+                grounded=True,
+                citations=[],
+                conversation_id=body.conversation_id,
+                clarification=Clarification(**question.as_dict()),
+            )
+
     try:
         stored = _store().load(student_id)
     except StoredRecordError:
@@ -167,9 +211,15 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         conversation_id=body.conversation_id,
         history_turns=settings.advisor_history_turns,
         use_llm=body.use_llm,
+        live=body.mode == "live",
     )
+    answer = reply.answer
+    named = named_courses(body.message)
+    if body.mode == "live" and len(named) == 1 and not answer.startswith(named[0]):
+        # Say back the code that was heard, so a mishearing is audible.
+        answer = f"For {named[0]}: {answer}"
     return ChatResponse(
-        answer=reply.answer,
+        answer=answer,
         intent=str(reply.intent),
         source=reply.source,
         grounded=reply.grounded,
@@ -179,6 +229,7 @@ def chat(user: CurrentUser, body: ChatRequest) -> ChatResponse:
         notice=reply.notice,
         conversation_id=body.conversation_id,
         understood_by=reply.understood_by,
+        links=[link.as_dict() for link in reply.links],
     )
 
 
@@ -236,3 +287,36 @@ def transcribe_question(
         confidence=result.confidence,
         clarifications=[Clarification(**q.as_dict()) for q in questions] or None,
     )
+
+
+#: Longer than any advisor answer; a cap so one request can't run up the TTS bill.
+SPEAK_MAX_CHARS = 2000
+
+
+class LinkModel(BaseModel):
+    name: str = Field(max_length=200)
+    url: str = Field(max_length=500)
+
+
+class SpeakRequest(BaseModel):
+    text: str
+    links: list[LinkModel] = []
+    #: Live voice: speak a short version (headline, a few items, caveats) of an
+    #: engine answer. The full answer stays on screen.
+    brief: bool = False
+
+
+@router.post("/speak", response_class=Response)
+def speak(user: CurrentUser, body: SpeakRequest) -> Response:
+    """Speak an advisor answer aloud (mp3). The text is reformatted for speech by
+    deterministic code only - no model sees it here."""
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="nothing to say")
+    if len(body.text) > SPEAK_MAX_CHARS:
+        raise HTTPException(status_code=413, detail="text too long to speak")
+    links = [Link(link.name, link.url) for link in body.links]
+    try:
+        audio = synthesize(to_speech(body.text, links, brief=body.brief))
+    except SpeechError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(content=audio, media_type="audio/mpeg")

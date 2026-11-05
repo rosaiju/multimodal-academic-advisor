@@ -155,6 +155,21 @@ class OpenAIChatProvider:
             return False, "OPENAI_API_KEY is not set"
         return True, "configured"
 
+    def probe(self) -> tuple[bool, str]:
+        """Ask OpenAI whether the key works. Used by /advisor/health only, so a
+        dead key shows up on page load rather than as a note under every answer."""
+        try:
+            from openai import AuthenticationError, OpenAI
+        except ImportError:  # pragma: no cover - optional extra
+            return False, f"the 'openai' package is not installed; {LLM_EXTRA_HINT}"
+        try:
+            OpenAI(api_key=self._api_key, timeout=8.0).models.retrieve(self._model)
+        except AuthenticationError as exc:
+            return False, f"OpenAI rejected the API key (401): {_short(exc)}"
+        except Exception as exc:  # noqa: BLE001 - network, 404 model, rate limit
+            return False, f"OpenAI check failed: {_short(exc)}"
+        return True, "configured and the key works"
+
     def complete(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 800) -> str:
         try:
             from openai import OpenAI
@@ -332,6 +347,63 @@ class OllamaChatProvider:
         return text
 
 
+class OpenRouterChatProvider:
+    """OpenRouter's OpenAI-compatible /chat/completions, over stdlib HTTP."""
+
+    provider_id = "openrouter"
+
+    def __init__(self, api_key: str, model: str, base_url: str, timeout: float = 45.0) -> None:
+        self.name = model
+        self._api_key = api_key
+        self._model = model
+        self._base = base_url.rstrip("/")
+        self._timeout = timeout
+
+    def available(self) -> tuple[bool, str]:
+        if not self._api_key:
+            return False, "OPENROUTER_API_KEY is not set"
+        return True, "configured"
+
+    def probe(self) -> tuple[bool, str]:
+        """GET /key: 200 for a working key, 401 for a dead one. Health check only."""
+        request = urllib.request.Request(
+            f"{self._base}/key", headers={"Authorization": f"Bearer {self._api_key}"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=8.0):
+                return True, "configured and the key works"
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                return False, f"OpenRouter rejected the API key ({exc.code})"
+            return False, f"OpenRouter check failed ({exc.code})"
+        except OSError as exc:
+            return False, f"cannot reach OpenRouter: {exc}"
+
+    def complete(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 800) -> str:
+        payload = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                *({"role": t.role, "content": t.content} for t in messages),
+            ],
+        }
+        data = _http_json(
+            f"{self._base}/chat/completions",
+            payload,
+            timeout=self._timeout,
+            headers={"Authorization": f"Bearer {self._api_key}"},
+        )
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            content = None
+        text = content.strip() if isinstance(content, str) else ""
+        if not text:
+            raise ProviderUnavailable("openrouter returned an empty completion")
+        return text
+
+
 def get_chat_provider(settings: Settings | None = None) -> ChatProvider:
     """Build the configured chat provider.
 
@@ -346,6 +418,13 @@ def get_chat_provider(settings: Settings | None = None) -> ChatProvider:
         return OpenAIChatProvider(settings.openai_api_key, settings.openai_chat_model)
     if provider == "gemini":
         return GeminiChatProvider(settings.gemini_api_key, settings.gemini_chat_model)
+    if provider == "openrouter":
+        return OpenRouterChatProvider(
+            settings.openrouter_api_key,
+            settings.openrouter_chat_model,
+            settings.openrouter_base_url,
+            settings.openrouter_timeout_seconds,
+        )
     return OllamaChatProvider(
         settings.ollama_base_url, settings.ollama_chat_model, settings.ollama_timeout_seconds
     )
@@ -366,3 +445,11 @@ def get_understanding_provider(settings: Settings | None = None) -> ChatProvider
             settings.advisor_understanding_timeout_seconds,
         )
     return get_chat_provider(settings)
+
+
+def _short(exc: Exception) -> str:
+    """An SDK error as one readable line, never more than 200 characters."""
+    message = getattr(exc, "body", None)
+    if isinstance(message, dict) and isinstance(message.get("message"), str):
+        return message["message"][:200]
+    return str(exc).splitlines()[0][:200]

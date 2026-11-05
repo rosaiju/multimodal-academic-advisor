@@ -66,8 +66,8 @@ async def _fail(websocket: WebSocket, reason: str) -> None:
     await _close(websocket)
 
 
-async def _signed_in(websocket: WebSocket, settings: Settings) -> tuple[str, str] | None:
-    """(student_id, conversation_id) if the first message is a `start` carrying a
+async def _signed_in(websocket: WebSocket, settings: Settings) -> tuple[str, str, bool] | None:
+    """(student_id, conversation_id, live) if the first message is a `start` carrying a
     valid token, in time; otherwise None. The conversation id only selects which
     earlier turns are used as context for clarifying a spoken course number."""
     try:
@@ -75,6 +75,7 @@ async def _signed_in(websocket: WebSocket, settings: Settings) -> tuple[str, str
         frame = json.loads(message.get("text") or "")
         token = frame.get("token") if frame.get("type") == "start" else None
         conversation = frame.get("conversation_id", "default")
+        live_mode = frame.get("live") is True
     except (TimeoutError, ValueError, AttributeError):
         return None
     if not isinstance(token, str) or not token:
@@ -84,17 +85,22 @@ async def _signed_in(websocket: WebSocket, settings: Settings) -> tuple[str, str
         return None
     if not isinstance(conversation, str) or not 0 < len(conversation) <= 64:
         conversation = "default"
-    return user.student_id, conversation
+    return user.student_id, conversation, live_mode
 
 
 @router.websocket("/listen")
 async def listen(websocket: WebSocket) -> None:
     await websocket.accept()
     settings = get_settings()
-    identity = await _signed_in(websocket, settings)
-    if identity is None:
+    signed_in = await _signed_in(websocket, settings)
+    if signed_in is None:
         await _fail(websocket, "unauthorized")
         return
+    student_id, conversation_id, live_mode = signed_in
+    identity = (student_id, conversation_id)
+    if live_mode:
+        # Hands-free conversation: end the turn on a shorter pause than dictation.
+        settings = settings.model_copy(update={"speech_pause_ms": settings.live_pause_ms})
     if not speech_registry.availability(settings)[0]:
         await _fail(websocket, "unavailable")
         return

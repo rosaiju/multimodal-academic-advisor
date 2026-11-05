@@ -157,6 +157,7 @@ class Intent(StrEnum):
     #: The student wrote about hurting themselves. Never routed by a model, never
     #: rephrased by one: the reply is fixed text pointing to people who can help.
     CRISIS = "crisis"
+    GRADUATE_EARLY = "graduate_early"
     NO_RECORD = "no_record"
     UNKNOWN = "unknown"
 
@@ -196,6 +197,13 @@ def detect_intent(question: str) -> Intent:
     # "Why does this course not count" must beat WHY_RECOMMENDED ("this course").
     if _EXPLAIN.search(q):
         return Intent.EXPLAIN_REQUIREMENT
+
+    # Before REMAINING_REQUIREMENTS: "summer classes to graduate early" says
+    # "to graduate" but asks about pace, which the engine cannot plan.
+    if "summer" in q or any(
+        k in q for k in ("graduate early", "graduate sooner", "finish early", "finish sooner")
+    ):
+        return Intent.GRADUATE_EARLY
 
     # "Why is COSC 220 recommended" must beat the generic course-info branch.
     if "why" in q and (
@@ -522,8 +530,7 @@ def answer_next_semester(facts: AdvisorFacts) -> GroundedAnswer:
         )
 
     lines = [
-        "Based on your confirmed record and the catalog prerequisite graph, "
-        "these are eligible now:"
+        "Based on your confirmed record and the catalog prerequisite graph, these are eligible now:"
     ]
     citations: list[str] = []
     for rec in facts.recommended[:6]:
@@ -1369,6 +1376,30 @@ def answer_unknown(facts: AdvisorFacts) -> GroundedAnswer:
     )
 
 
+def answer_graduate_early(facts: AdvisorFacts) -> GroundedAnswer:
+    """Pace questions. The catalog has no summer sessions, term loads or credit
+    limits, so the engine declines to plan - and says what it does know."""
+    eligible = [r.course.code for r in facts.recommended[:3]]
+    text = (
+        "I can't plan summer terms or an early graduation date for you - the catalog "
+        "I work from doesn't include summer sessions, term credit limits or course "
+        f"schedules. What I can tell you: you still need {facts.credits_remaining} "
+        "credits."
+    )
+    if eligible:
+        text += f" Courses you're eligible for now include {', '.join(eligible)}."
+    text += (
+        " An academic advisor can tell you which of those run in summer and how "
+        "many credits you can take."
+    )
+    return GroundedAnswer(
+        text=text + _coverage_note(facts),
+        intent=Intent.GRADUATE_EARLY,
+        citations=eligible,
+        grounded=False,
+    )
+
+
 def deterministic_answer(
     facts: AdvisorFacts | None,
     question: str,
@@ -1426,4 +1457,6 @@ def deterministic_answer(
         return answer_explain(facts, question, codes)
     if intent is Intent.WELLBEING:
         return answer_wellbeing(facts)
+    if intent is Intent.GRADUATE_EARLY:
+        return answer_graduate_early(facts)
     return answer_unknown(facts)

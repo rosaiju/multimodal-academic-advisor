@@ -141,7 +141,13 @@ export const getAdvisorHealth = () => request('/advisor/health')
  * `confirmCourses` follows. `conversationId` groups turns into one session and
  * is scoped server-side to the signed-in student.
  */
-export function askAdvisor({ message, conversationId = 'default', useLlm = true }) {
+export function askAdvisor({
+  message,
+  conversationId = 'default',
+  useLlm = true,
+  mode = 'text',
+  confidence = null,
+}) {
   return request('/advisor/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,8 +155,27 @@ export function askAdvisor({ message, conversationId = 'default', useLlm = true 
       message,
       conversation_id: conversationId,
       use_llm: useLlm,
+      mode,
+      ...(confidence == null ? {} : { confidence }),
     }),
   })
+}
+
+/** POST /advisor/speak - an advisor answer as spoken mp3 (a Blob). */
+export async function speakText({ text, links = [] }) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+  const response = await fetch(`${BASE}/advisor/speak`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ text, links }),
+  })
+  if (!response.ok) {
+    const error = new Error(`${response.status} ${response.statusText}`)
+    error.status = response.status
+    throw error
+  }
+  return response.blob()
 }
 
 /**

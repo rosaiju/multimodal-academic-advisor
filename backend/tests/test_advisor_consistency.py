@@ -180,7 +180,12 @@ class TestRecordedLiveReplies:
             "(which you're currently taking). Remember the catalog is still partial."
         )
         problems = check(facts, "What should I take next semester?", reply)
-        assert problems == ["drops course codes from the engine's answer: COSC241"]
+        # Since the MATH prerequisites were sourced (2026-11-04) the engine's four-item
+        # "not yet eligible" list leads with the MATH chain, so COSC354/COSC241 no
+        # longer appear in it; the drops detected are the ones it now names.
+        assert problems == [
+            "drops course codes from the engine's answer: COSC351, MATH312, MATH331"
+        ]
 
     def test_title_moved_to_the_wrong_course(self, facts) -> None:
         """COSC 241 was given COSC 243's title, and both prerequisites were called
@@ -298,8 +303,8 @@ class TestEachCheck:
         reply = (
             "Right now you're taking COSC220 Data Structures and Algorithms - 4 credits "
             "in progress. Until it has a final grade it doesn't count, so you stay at "
-            "15 earned credits. Finishing it clears a prerequisite for COSC352 and "
-            "COSC354. The catalog is still partial."
+            "15 earned credits. Finishing it clears a prerequisite for COSC352, "
+            "COSC354, COSC458 and COSC459. The catalog is still partial."
         )
         assert check(facts, "What courses am I taking right now?", reply) == []
 

@@ -159,6 +159,10 @@ class VisionTranscriptExtractor:
         self.name = f"{EXTRACTOR_PREFIX}:{provider.name}"
 
     def can_handle(self, filename: str, content_type: str | None) -> bool:
+        if not getattr(self._provider, "supports_pdf", True) and (
+            content_type == "application/pdf" or Path(filename).suffix.lower() == ".pdf"
+        ):
+            return False
         if content_type in VISION_MEDIA_TYPES:
             return True
         if content_type and content_type.startswith("image/"):

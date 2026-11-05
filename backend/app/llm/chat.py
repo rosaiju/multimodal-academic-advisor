@@ -213,10 +213,24 @@ class GeminiChatProvider:
             return False, "GEMINI_API_KEY is not set"
         return True, "configured"
 
-    def complete(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 800) -> str:
+    def complete(
+        self,
+        *,
+        system: str,
+        messages: list[ChatTurn],
+        max_tokens: int = 800,
+        json_only: bool = False,
+    ) -> str:
         ok, reason = self.available()
         if not ok:
             raise ProviderUnavailable(reason)
+        generation: dict = {"maxOutputTokens": max_tokens, "temperature": 0.2}
+        if json_only:
+            generation = {
+                "maxOutputTokens": max_tokens,
+                "temperature": 0,
+                "responseMimeType": "application/json",
+            }
         payload = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [
@@ -227,7 +241,7 @@ class GeminiChatProvider:
                 }
                 for t in messages
             ],
-            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.2},
+            "generationConfig": generation,
         }
         data = _http_json(
             f"{self.API}/{self._model}:generateContent",
@@ -252,6 +266,12 @@ class GeminiChatProvider:
         if not text:
             raise ProviderUnavailable("gemini returned an empty completion")
         return text
+
+    def complete_json(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 120) -> str:
+        """JSON-mode completion (`responseMimeType: application/json`), for routing."""
+        return self.complete(
+            system=system, messages=messages, max_tokens=max_tokens, json_only=True
+        )
 
 
 class OllamaChatProvider:
@@ -299,6 +319,26 @@ class OllamaChatProvider:
             ],
         }
         data = _http_json(f"{self._base}/api/chat", payload, timeout=self._timeout)
+        return self._text(data)
+
+    def complete_json(self, *, system: str, messages: list[ChatTurn], max_tokens: int = 120) -> str:
+        """Like `complete`, but Ollama constrains decoding to valid JSON
+        (`format: "json"`) at temperature 0. Used for question routing only."""
+        payload = {
+            "model": self._model,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0, "num_predict": max_tokens},
+            "messages": [
+                {"role": "system", "content": system},
+                *({"role": t.role, "content": t.content} for t in messages),
+            ],
+        }
+        data = _http_json(f"{self._base}/api/chat", payload, timeout=self._timeout)
+        return self._text(data)
+
+    @staticmethod
+    def _text(data: dict) -> str:
         message = data.get("message")
         content = message.get("content") if isinstance(message, dict) else None
         text = content.strip() if isinstance(content, str) else ""
@@ -388,6 +428,23 @@ def get_chat_provider(settings: Settings | None = None) -> ChatProvider:
     return OllamaChatProvider(
         settings.ollama_base_url, settings.ollama_chat_model, settings.ollama_timeout_seconds
     )
+
+
+def get_understanding_provider(settings: Settings | None = None) -> ChatProvider:
+    """The provider that routes questions (app/advisor/understanding.py).
+
+    The configured chat provider, except that for Ollama an optional smaller model
+    (OLLAMA_UNDERSTANDING_MODEL) and a shorter timeout apply: routing is a few
+    tokens of JSON, and a student should not wait a full rephrasing for it.
+    """
+    settings = settings or get_settings()
+    if settings.llm_provider == "ollama":
+        return OllamaChatProvider(
+            settings.ollama_base_url,
+            settings.ollama_understanding_model or settings.ollama_chat_model,
+            settings.advisor_understanding_timeout_seconds,
+        )
+    return get_chat_provider(settings)
 
 
 def _short(exc: Exception) -> str:

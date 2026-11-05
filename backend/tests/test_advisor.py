@@ -284,7 +284,8 @@ class TestModelIsOnlyAllowedToPhrase:
         eligible = ", ".join(r.course.code for r in facts.recommended[:6])
         stub = StubProvider(
             f"You're eligible now for {eligible}. COSC354 needs COSC220 and COSC241 "
-            "first, and COSC352 needs COSC220, so those aren't available yet. The "
+            "first, COSC352, COSC458 and COSC459 need COSC220, and MATH242, MATH312 "
+            "and MATH331 need MATH241 or MATH242 first, so those aren't available yet. The "
             "catalog is still partial, so confirm with your advisor."
         )
         reply = ask(facts, "What should I take next semester?", student_id="s1", provider=stub)

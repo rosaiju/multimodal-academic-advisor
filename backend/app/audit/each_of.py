@@ -12,7 +12,7 @@ keeps the standalone entry point used when evaluating one block on its own.
 
 from __future__ import annotations
 
-from app.audit.evaluators import evaluate_each_of_pool
+from app.audit.evaluators import evaluate_each_of_pool, hold_for_pass_grades
 from app.audit.record import StudentRecord
 from app.catalog.schema import EachOfBlock, Program
 from app.schemas.audit import RequirementBlockResult
@@ -24,5 +24,6 @@ def evaluate_each_of(
     record: StudentRecord,
 ) -> RequirementBlockResult:
     """Decide whether `record` satisfies `block`, ignoring all other blocks."""
-    result, _consumed = evaluate_each_of_pool(program, block, list(record.completed))
-    return result
+    pool = list(record.completed)
+    result, consumed = evaluate_each_of_pool(program, block, pool)
+    return hold_for_pass_grades(program, block, pool, consumed, result)

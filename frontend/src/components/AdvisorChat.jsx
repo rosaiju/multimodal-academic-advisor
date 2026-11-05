@@ -517,6 +517,19 @@ export function AdvisorTurn({ reply, onSpeak, speaking = false, pending = false,
             {fromModel ? `Phrased by ${reply.model ?? 'a model'}` : 'Computed by the engine'}
           </span>
 
+          {reply.understood_by && (
+            <span
+              className="text-xs text-slate-400"
+              title={
+                reply.understood_by === 'model'
+                  ? 'A language model read your question and the conversation to choose which engine answer to give. The answer itself comes from the engine.'
+                  : 'Your question was matched to an engine answer by keywords.'
+              }
+            >
+              {reply.understood_by === 'model' ? 'Question read by the model' : 'Matched by keywords'}
+            </span>
+          )}
+
           {reply.grounded === false && (
             <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/30">
               Outside the catalog

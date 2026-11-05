@@ -20,6 +20,14 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.audit.grades import (
+    GRADE_POINTS,
+    earns_credit,
+    gpa_figures,
+    gpa_points,
+    gpa_policy_note,
+    is_pass_grade,
+)
 from app.audit.matching import maximum_matching
 from app.audit.record import CompletedCourse
 from app.catalog.schema import (
@@ -35,17 +43,6 @@ from app.catalog.schema import (
     grade_meets,
 )
 from app.schemas.audit import AppliedCourse, BlockStatus, CourseRef, RequirementBlockResult
-
-#: Standard four-point scale. Morgan states minimums as "2.0 or better", which is
-#: this scale. Suffixes are stripped (A- and A+ both count as A), matching
-#: `grade_meets` in the catalog schema — see `gpa_points` for why that matters.
-GRADE_POINTS: dict[str, Decimal] = {
-    "A": Decimal(4),
-    "B": Decimal(3),
-    "C": Decimal(2),
-    "D": Decimal(1),
-    "F": Decimal(0),
-}
 
 
 def course_ref(course: Course) -> CourseRef:
@@ -299,47 +296,35 @@ def evaluate_credits_from(
 # --------------------------------------------------------------------------- #
 # gpa / residency - decided from the record, not from course assignment
 # --------------------------------------------------------------------------- #
-def gpa_points(courses: list[CompletedCourse]) -> Decimal | None:
-    """Quality-point GPA over courses carrying a numeric grade.
-
-    Returns None when nothing gradeable is present — the caller must treat that as
-    "unknown", never as 0.0. Suffixes are stripped, so A- counts as A. That is the
-    same simplification `grade_meets` already makes; if Morgan weights +/- grades,
-    this under- and over-states by up to a third of a point and must be revisited.
-    """
-    quality = Decimal(0)
-    credits = Decimal(0)
-    for c in courses:
-        grade = c.grade.strip().upper().rstrip("+-")
-        if grade not in GRADE_POINTS:
-            continue  # W, I, IP, NP, AU carry no quality points
-        quality += GRADE_POINTS[grade] * c.credits
-        credits += c.credits
-    if credits == 0:
-        return None
-    return (quality / credits).quantize(Decimal("0.01"))
-
-
 def evaluate_gpa(
     program: Program, block: GpaBlock, pool: list[CompletedCourse]
 ) -> tuple[RequirementBlockResult, list[int]]:
-    trusted = [c for c in pool if c.is_trusted and program.course(c.code) is not None]
-    if block.scope == "major":
-        majors = {s.upper() for s in program.major_subjects}
-        trusted = [c for c in trusted if program.course(c.code).subject in majors]
+    """Decide a GPA minimum - but only when every reading of the rules agrees.
 
-    actual = gpa_points(trusted)
-    if actual is None:
+    The GPA covers every trusted graded row, catalog or not: a Morgan course the
+    partial catalog does not name is still on the student's GPA. Morgan's repeat and
+    transfer-grade rules are not encoded, so the GPA is computed under each reading
+    (`grades.gpa_figures`). If the minimum is met under some readings and missed
+    under others, the honest status is NEEDS_ADVISOR.
+    """
+    figures = gpa_figures(program, pool, block.scope)
+    note = block.note
+    if figures.value is None:
+        status = BlockStatus.UNMET
+    elif figures.low is not None and figures.low >= block.min_gpa:
+        status = BlockStatus.SATISFIED
+    elif figures.high is not None and figures.high < block.min_gpa:
         status = BlockStatus.UNMET
     else:
-        status = BlockStatus.SATISFIED if actual >= block.min_gpa else BlockStatus.UNMET
+        status = BlockStatus.NEEDS_ADVISOR
+        note = gpa_policy_note(figures, block.scope)
 
     # GPA blocks consume no courses: a course counts toward GPA and toward a
     # requirement block at the same time. That is not double-counting.
-    return (
-        _result(block, status, [], credits_required=Decimal(0)),
-        [],
-    )
+    result = _result(block, status, [], credits_required=Decimal(0))
+    if note != block.note:
+        result = result.model_copy(update={"note": note})
+    return result, []
 
 
 def evaluate_residency(
@@ -349,11 +334,16 @@ def evaluate_residency(
 
     `CompletedCourse.institution` is optional and usually absent, because a
     transcript row does not always say. When it is missing the honest answer is
-    NEEDS_ADVISOR — not an assumption that everything was taken in residence, which
+    NEEDS_ADVISOR - not an assumption that everything was taken in residence, which
     would silently pass a transfer student who has not met the requirement.
+
+    Only EARNED credit counts: a failed, withdrawn or in-progress course is not
+    credit completed anywhere. Courses the partial catalog does not name count at
+    their transcript credits - a Morgan course is Morgan credit whether or not this
+    file lists it. A retake of a catalog course is counted once.
     """
-    trusted = [c for c in pool if c.is_trusted and program.course(c.code) is not None]
-    if any(c.institution is None for c in trusted) or not trusted:
+    earned_rows = [c for c in pool if c.is_trusted and earns_credit(c.grade)]
+    if any(c.institution is None for c in earned_rows) or not earned_rows:
         result = _result(block, BlockStatus.NEEDS_ADVISOR, [], credits_required=Decimal(0))
         return (
             result.model_copy(
@@ -368,10 +358,19 @@ def evaluate_residency(
         )
 
     here = program.institution.strip().lower()
-    earned = sum(
-        (program.course(c.code).credits for c in trusted if c.institution.strip().lower() == here),
-        Decimal(0),
-    )
+    earned = Decimal(0)
+    counted: set[str] = set()
+    for c in earned_rows:
+        if c.institution.strip().lower() != here:
+            continue
+        course = program.course(c.code)
+        if course is not None:
+            if c.code in counted:
+                continue
+            counted.add(c.code)
+            earned += course.credits
+        else:
+            earned += c.credits
     status = (
         BlockStatus.SATISFIED
         if earned >= block.min_credits_at_institution
@@ -379,3 +378,58 @@ def evaluate_residency(
     )
     result = _result(block, status, [], credits_required=block.min_credits_at_institution)
     return result.model_copy(update={"credits_applied": earned}), []
+
+
+# --------------------------------------------------------------------------- #
+# pass-type grades - a hold, not a verdict
+# --------------------------------------------------------------------------- #
+def hold_for_pass_grades(
+    program: Program,
+    block: RequirementBlock,
+    pool: list[CompletedCourse],
+    consumed: list[int],
+    result: RequirementBlockResult,
+) -> RequirementBlockResult:
+    """An unfinished block that a P/S/CR course might finish goes to an advisor.
+
+    A pass grade earns credit but has no letter, and the catalog does not say
+    whether a pass meets a block's minimum grade. Reporting the block UNMET would be
+    a confident answer to a question nobody has answered, so the block is held as
+    NEEDS_ADVISOR with the course named.
+    """
+    if result.status is BlockStatus.SATISFIED or result.status is BlockStatus.NEEDS_ADVISOR:
+        return result
+    allowed = {c.code for c in program.courses_for_block(block)}
+    used = {pool[i].code for i in consumed}
+    held = sorted(
+        {
+            c.code
+            for c in pool
+            if c.is_trusted and c.code in allowed and c.code not in used and is_pass_grade(c.grade)
+        }
+    )
+    if not held:
+        return result
+    note = (
+        f"{', '.join(held)} carries a pass grade. Whether a pass meets this requirement's "
+        f"minimum grade ({block.min_grade}) is not in the catalog - confirm with an advisor."
+    )
+    if result.note:
+        note = f"{result.note} {note}"
+    return result.model_copy(update={"status": BlockStatus.NEEDS_ADVISOR, "note": note})
+
+
+__all__ = [
+    "GRADE_POINTS",
+    "applied_course",
+    "course_ref",
+    "eligible_indices",
+    "evaluate_all_of",
+    "evaluate_credits_from",
+    "evaluate_each_of_pool",
+    "evaluate_gpa",
+    "evaluate_n_of",
+    "evaluate_residency",
+    "gpa_points",
+    "hold_for_pass_grades",
+]

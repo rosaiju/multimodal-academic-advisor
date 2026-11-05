@@ -13,7 +13,7 @@ export function Card({ title, subtitle, action, children, className = '' }) {
       className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}
     >
       {(title || action) && (
-        <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-5 py-4">
           <div>
             {title && <h2 className="font-semibold text-slate-900">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
@@ -226,6 +226,20 @@ export function RowStatusBadge({ value }) {
       className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${meta.className}`}
     >
       {meta.label}
+    </span>
+  )
+}
+
+/**
+ * "Computed by the engine" - the provenance mark for screens whose facts come
+ * from the deterministic degree engine (catalog + confirmed record), with no
+ * language model involved. Same wording as the advisor chat's engine label, so
+ * a student learns one phrase for "this was calculated, not generated".
+ */
+export function EngineBadge({ children = 'Computed by the engine' }) {
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+      {children}
     </span>
   )
 }

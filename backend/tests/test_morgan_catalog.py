@@ -107,25 +107,26 @@ class TestCourseLayer:
                 assert course.min_prereq_grade == "C", course.code
 
     def test_unsourced_prerequisites_are_absent_not_guessed(self, morgan: Program) -> None:
-        """34 courses have no prerequisite source consulted yet.
+        """Courses whose [COURSE] record was not read carry no prerequisites.
 
         They must carry NO prerequisites rather than plausible ones. An invented
         prerequisite blocks a student from a course they are actually eligible for.
         """
         sourced = {c.code for c in morgan.courses if c.prerequisites}
-        assert len(sourced) == 20
-        assert morgan.course("COSC459").prerequisites == []
+        assert len(sourced) == 32
+        # Sourced 2026-11-04 from [COURSE] coid=63662 (was unsourced until then).
+        assert morgan.course("COSC459").prerequisites == ["COSC220"]
 
 
 class TestMath141Stub:
     def test_stub_is_zero_credit_and_marked(self, morgan: Program) -> None:
         """MATH141 is the only course here not named by [PLANNER] - it appears only
-        as a COSC241 prerequisite. A guessed credit value would flow into audit
-        totals; zero fails loudly instead."""
+        as a COSC241 prerequisite. It was a zero-credit UNVERIFIED stub until its
+        own [COURSE] record (coid=62675) was read on 2026-11-04."""
         course = morgan.course("MATH141")
         assert course is not None
-        assert course.credits == Decimal(0)
-        assert "UNVERIFIED" in course.title
+        assert course.credits == Decimal(4)
+        assert course.title == "Precalculus"
 
     def test_stub_satisfies_no_requirement_block(self, morgan: Program) -> None:
         counted: set[str] = set()
@@ -135,7 +136,7 @@ class TestMath141Stub:
 
     def test_stub_is_the_only_zero_credit_course(self, morgan: Program) -> None:
         zero = [c.code for c in morgan.courses if c.credits == 0]
-        assert zero == ["MATH141"]
+        assert zero == []
 
 
 class TestProvisionalStatus:

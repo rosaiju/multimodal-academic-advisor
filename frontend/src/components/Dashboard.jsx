@@ -4,11 +4,13 @@ import {
   Button,
   Card,
   EmptyState,
+  EngineBadge,
   ProgressRing,
   ProvenanceBadge,
   Spinner,
   StatusBadge,
 } from './ui'
+import WhyPanel from './WhyPanel'
 import { getAuditSummary, getPlan } from '../api'
 
 /**
@@ -26,6 +28,7 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
   const [summary, setSummary] = useState(null)
   const [plan, setPlan] = useState(null)
   const [error, setError] = useState(null)
+  const [openWhy, setOpenWhy] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -98,7 +101,10 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
           />
 
           <div className="flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">Credit progress</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">Credit progress</h2>
+              <EngineBadge />
+            </div>
             <p className="text-sm text-slate-500">
               {summary.program_id} · catalog {summary.catalog_year}
             </p>
@@ -256,6 +262,17 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
                       Options: {gap.options.slice(0, 6).map((o) => o.code).join(', ')}
                       {gap.options.length > 6 && ` +${gap.options.length - 6} more`}
                     </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setOpenWhy(openWhy === gap.block_id ? null : gap.block_id)}
+                    aria-expanded={openWhy === gap.block_id}
+                    className="mt-2 text-xs font-medium text-slate-900 underline underline-offset-2"
+                  >
+                    {openWhy === gap.block_id ? 'Hide the details' : 'Why is this still open?'}
+                  </button>
+                  {openWhy === gap.block_id && (
+                    <WhyPanel studentId={studentId} blockId={gap.block_id} />
                   )}
                 </li>
               ))}

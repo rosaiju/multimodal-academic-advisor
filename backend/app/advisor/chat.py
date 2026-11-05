@@ -30,7 +30,15 @@ from app.advisor.answers import GroundedAnswer, Intent, detect_intent, determini
 from app.advisor.consistency import allowed_codes, check_rephrasing, invented_codes
 from app.advisor.facts import AdvisorFacts, render_facts
 from app.advisor.links import Link, links_for
-from app.llm.chat import ChatProvider, ChatTurn, ProviderUnavailable, get_chat_provider
+from app.advisor.understanding import understand
+from app.config import get_settings
+from app.llm.chat import (
+    ChatProvider,
+    ChatTurn,
+    ProviderUnavailable,
+    get_chat_provider,
+    get_understanding_provider,
+)
 from app.speech.speakable import brief_text
 
 logger = logging.getLogger(__name__)
@@ -217,6 +225,10 @@ class AdvisorReply:
     #: A model reply that failed the consistency check. Never shown to the student
     #: and not returned by the API; kept for logs and the live smoke test.
     discarded: str | None = None
+    #: Which path chose the route to the engine answer: "model" when a language
+    #: model read the question (and recent turns) and picked one of the engine's
+    #: answers, "keywords" otherwise. It never means the model wrote the answer.
+    understood_by: str = "keywords"
     #: Curated links (app/advisor/links.py) for answers the advisor cannot give.
     links: list[Link] = field(default_factory=list)
     #: Live voice: the student asked for everything, so speak the whole answer
@@ -264,9 +276,20 @@ def ask(
     provider: ChatProvider | None = None,
     history_turns: int = 12,
     use_llm: bool = True,
+    understanding_provider: ChatProvider | None = None,
+    understanding: str | None = None,
+    rephrase: bool | None = None,
     live: bool = False,
 ) -> AdvisorReply:
-    """Answer one question. Never raises for a provider problem."""
+    """Answer one question. Never raises for a provider problem.
+
+    Routing: if a model is configured for understanding (ADVISOR_UNDERSTANDING=
+    model, the default, and a reachable provider), it picks which engine answer
+    the question wants, using the recent conversation. Otherwise keywords do. A
+    caller that injects `provider` gets keyword routing unless it also injects
+    `understanding_provider`, so a stub provider never receives routing calls it
+    did not ask for.
+    """
     question = question.strip()
     conversation = conversations.get(student_id, conversation_id)
     # "List them all" names no topic: answer the last question again, in full.
@@ -279,12 +302,45 @@ def ask(
     ):
         asked = conversation.last_question
         read_in_full = live
-    prepared: GroundedAnswer = deterministic_answer(facts, asked)
+
+    route_intent: Intent | None = None
+    route_codes: list[str] | None = None
+    understood_by = "keywords"
+    if use_llm and facts is not None and facts.has_coursework:
+        router = understanding_provider
+        if router is None and provider is None:
+            mode = understanding or get_settings().advisor_understanding
+            router = get_understanding_provider() if mode == "model" else None
+        if router is not None and router.available()[0]:
+            catalog = frozenset(
+                c.code.replace(" ", "").upper()
+                for c in (facts.program.courses if facts.program else [])
+            )
+            understood = understand(
+                asked, list(conversation.turns), provider=router, catalog_codes=catalog
+            )
+            if understood.source == "model":
+                route_intent, route_codes = understood.intent, understood.codes or None
+                understood_by = "model"
+                logger.info(
+                    "model routed question to %s (codes=%s, follow_up_of=%s) in %ss",
+                    understood.intent,
+                    understood.codes,
+                    understood.follow_up_of,
+                    understood.seconds,
+                )
+
+    prepared: GroundedAnswer = deterministic_answer(facts, asked, route_intent, route_codes)
 
     def finish(reply: AdvisorReply) -> AdvisorReply:
         # Links attach here, by intent, on every path - so a rephrased reply
         # carries the same curated links and never a model-supplied one.
-        reply = replace(reply, links=links_for(reply.intent), read_in_full=read_in_full)
+        reply = replace(
+            reply,
+            understood_by=understood_by,
+            links=links_for(reply.intent),
+            read_in_full=read_in_full,
+        )
         if prepared.intent not in (Intent.UNKNOWN, Intent.NO_RECORD):
             conversation.last_question = asked
         conversation.add("user", question, keep=history_turns)
@@ -324,9 +380,24 @@ def ask(
 
     # Nothing to rephrase against: with no record, the deterministic text already
     # says the right thing and a model could only pad it.
-    # Asked aloud for everything: the engine's whole answer, not another summary.
-    if not use_llm or facts is None or prepared.intent is Intent.NO_RECORD or read_in_full:
+    # A crisis reply is fixed text: no model rewrites it. Asked aloud for
+    # everything: the engine's whole answer, not another summary.
+    if (
+        not use_llm
+        or facts is None
+        or prepared.intent in (Intent.NO_RECORD, Intent.CRISIS)
+        or read_in_full
+    ):
         return finish(base)
+
+    if not (get_settings().advisor_rephrase if rephrase is None else rephrase):
+        notice = "Answered from the degree engine; model rephrasing is switched off."
+        if understood_by == "model":
+            notice = (
+                "A language model read your question and chose this answer; the "
+                "degree engine wrote it. Model rephrasing is switched off."
+            )
+        return finish(replace(base, notice=notice))
 
     provider = provider or get_chat_provider()
     usable, reason = provider.available()

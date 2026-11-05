@@ -27,11 +27,16 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from app.advisor.answers import COURSE_CODE, GroundedAnswer, Intent
-from app.advisor.facts import AdvisorFacts, render_facts
+from app.advisor.facts import AdvisorFacts, every_option_required, render_facts
 
 _NUMBER = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\w])")
 _LIST_MARKER = re.compile(r"^\s*\d+[.)]\s", re.MULTILINE)
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?;])\s+|\n+")
+#: Wording that turns a list into a pick-one choice.
+_CHOICE = re.compile(
+    r"\beither\b|\bone of\b|\bchoose\b|\bpick\b|\bselect\b|\bany of\b|\balternatively\b",
+    re.IGNORECASE,
+)
 
 _NUMBER_WORDS = {
     "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
@@ -191,8 +196,9 @@ def _required_codes(prepared: str, subjects: frozenset[str]) -> set[str]:
     student acts on. Eligible courses, blockers, missing prerequisites and
     in-progress courses are all outside those lists, so all of them are kept.
     """
+    lists = ("options:", "all of these are needed:")
     kept = "\n".join(
-        line for line in prepared.splitlines() if not line.strip().lower().startswith("options:")
+        line for line in prepared.splitlines() if not line.strip().lower().startswith(lists)
     )
     return course_codes(kept, subjects)
 
@@ -332,6 +338,18 @@ def check_rephrasing(
         _BLOCKER_KEPT.search(text)
     ):
         problems.append("drops the statement that a course is not yet available")
+
+    # 8b. Courses a block needs ALL of must not become a choice. Seen live: "2 more
+    # courses ... options are either COSC459 Database Design or COSC490".
+    for block in facts.blocks:
+        if not every_option_required(block):
+            continue
+        required = {c.replace(" ", "").upper() for c in block["options"]}
+        for sentence in _sentences(text):
+            if len(course_codes(sentence, subjects) & required) >= 2 and _CHOICE.search(sentence):
+                problems.append(
+                    f"presents courses that are all required as a choice: {sentence.strip()!r}"
+                )
 
     # 9. A refusal stays a refusal - a model must not answer what the engine would not.
     if (not grounded or intent is Intent.UNKNOWN) and not _REFUSAL.search(text):

@@ -98,19 +98,33 @@ class RequirementBlockResult(BaseModel):
 
 
 class GpaSummary(BaseModel):
+    """GPA as the transcript shows it, plus how far policy could move it.
+
+    `cumulative` and `major` average every graded attempt at every institution.
+    Morgan's repeat (grade replacement) and transfer-grade rules are not encoded, so
+    the `_low`/`_high` fields bound the GPA across every reading of them. When low
+    and high differ, `notes` says why, and a requirement that the range straddles is
+    NEEDS_ADVISOR rather than a guess.
+    """
+
     cumulative: Decimal | None
     major: Decimal | None
     min_cumulative_required: Decimal
     min_major_required: Decimal
+    cumulative_low: Decimal | None = None
+    cumulative_high: Decimal | None = None
+    major_low: Decimal | None = None
+    major_high: Decimal | None = None
+    notes: list[str] = Field(default_factory=list)
 
     @property
     def meets_requirements(self) -> bool:
+        """True only when the minimums hold under EVERY reading of the GPA rules."""
         if self.cumulative is None or self.major is None:
             return False
-        return (
-            self.cumulative >= self.min_cumulative_required
-            and self.major >= self.min_major_required
-        )
+        cumulative = self.cumulative_low if self.cumulative_low is not None else self.cumulative
+        major = self.major_low if self.major_low is not None else self.major
+        return cumulative >= self.min_cumulative_required and major >= self.min_major_required
 
 
 class MatcherStrategy(StrEnum):
@@ -204,6 +218,10 @@ class AuditResult(BaseModel):
     #: Always VERIFIED — this object is engine output by construction.
     provenance: Provenance = Provenance.VERIFIED
 
+    #: Things the engine could not decide from the record and the catalog, in plain
+    #: words (unrecognised grades, courses passed twice). Never LLM-written.
+    notes: list[str] = Field(default_factory=list)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def percent_complete(self) -> float | None:
@@ -266,13 +284,33 @@ class AuditResult(BaseModel):
         graduate" on a partial catalog is the single worst thing this system could
         do, so an incomplete catalog fails closed.
         """
+        return not self.graduation_blockers
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def graduation_blockers(self) -> list[str]:
+        """Every reason `is_graduation_eligible` is False, in plain words.
+
+        Empty exactly when the audit says the student may graduate. A UI should show
+        these rather than a bare "not eligible".
+        """
+        out: list[str] = []
+        # coverage is None only on hand-built mocks that predate it.
         if self.coverage is not None and not self.coverage.is_complete:
-            return False
-        return (
-            self.total_credits_applied >= self.total_credits_required
-            and self.gpa.meets_requirements
-            and all(b.is_complete for b in self.blocks)
-        )
+            out.append(
+                "The catalog is only partly encoded, so no audit here can confirm graduation."
+            )
+        if self.total_credits_applied < self.total_credits_required:
+            out.append(
+                f"{self.total_credits_applied} of {self.total_credits_required} required "
+                "credits are applied to encoded requirements."
+            )
+        if not self.gpa.meets_requirements:
+            out.append("The GPA minimums are not confirmed as met.")
+        for b in self.blocks:
+            if not b.is_complete:
+                out.append(f"{b.name}: {b.status.value.replace('_', ' ')}.")
+        return out
 
     def unmet_blocks(self) -> list[RequirementBlockResult]:
         return [b for b in self.blocks if not b.is_complete]

@@ -13,6 +13,7 @@ apply" call would be friendlier and would make the provenance rule meaningless.
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Annotated
 
@@ -27,8 +28,15 @@ from app.ingestion.confirmation import ConfirmationError, confirm_course
 from app.ingestion.extractor import UnsupportedDocument, extract_transcript
 from app.ingestion.models import ExtractedCourse, ExtractionResult
 from app.ingestion.store import RecordStore, StoredRecord, StoredRecordError
+from app.llm.provider import ProviderError
 
 router = APIRouter(tags=["ingestion"])
+logger = logging.getLogger(__name__)
+
+DOCUMENT_READER_UNAVAILABLE = (
+    "The document reader could not read this file right now. A plain-text "
+    "transcript always works."
+)
 
 
 def _store() -> RecordStore:
@@ -136,6 +144,11 @@ async def upload_transcript(
         )
     except UnsupportedDocument as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except ProviderError as exc:
+        # A model-backed reader failed (timeout, model not pulled, quota). Its
+        # text can name hosts or accounts, so it is logged, not returned.
+        logger.warning("document reader failed on %s: %s", file.filename, exc)
+        raise HTTPException(status_code=503, detail=DOCUMENT_READER_UNAVAILABLE) from None
 
     return UploadResponse(summary=extraction.summary(), extraction=extraction)
 

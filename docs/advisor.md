@@ -25,7 +25,9 @@ advisor implements that rule in four steps.
          |                 dashboard makes, on the same stored record
          v
   2. answer it    ......  app/advisor/answers.py
-         |                 keyword intent routing, prose assembled from facts
+         |                 route chosen by keywords, or by a model reading the
+         |                 question + recent turns (understanding.py, optional);
+         |                 prose assembled from facts either way
          |                 NO MODEL INVOLVED - this answer is already correct
          v
   3. rephrase?    ......  app/advisor/chat.py + app/llm/chat.py
@@ -96,6 +98,92 @@ catalog coverage caveat.
 The system prompt then forbids adding anything not in that block. Prompt rules
 are not a security boundary, which is why step 4 exists as well.
 
+## Question understanding (model-chosen routes)
+
+Keyword routing reads one message on its own, so follow-ups failed. After "How
+many credits am I missing?", the follow-up "It says I have earned 138 credits. So
+I don't think I need anymore. Right?" got the identical credits answer.
+
+`app/advisor/understanding.py` asks the configured chat model to read the
+question plus the last four turns (each clipped to 240 characters) and reply with
+strict JSON:
+
+```json
+{"intent": "remaining_requirements", "course_codes": [], "follow_up_of": "credits"}
+```
+
+Ollama is called with `format: "json"`, Gemini with
+`responseMimeType: application/json`, both at temperature 0 and at most 80 tokens.
+What the model may and may not do:
+
+* It picks a **route** - one of the `Intent` values. It does not write an answer
+  and never sees the student's record. `deterministic_answer(facts, question,
+  intent, codes)` still builds every sentence from the engine, and any rephrasing
+  still goes through `check_rephrasing`.
+* `crisis`, `wellbeing` and `no_record` cannot be chosen by the model. Crisis and
+  stress wording is routed by keywords before the model is asked.
+* Course codes are kept only if the catalog has them **and** they appear in the
+  question or recent turns. If the question names catalog courses itself, those
+  are used and the model's list is ignored.
+* Any failure (no provider, timeout, non-JSON, an intent outside the list) falls
+  back to keywords. So does a model `unknown` when keywords found a route, and a
+  confirmation question ("...right?") is never answered with credits alone.
+* The reply carries `understood_by: "model" | "keywords"`, shown in the chat as
+  "Question read by the model" or "Matched by keywords" beside the source label.
+  It never changes the "Computed by the engine" / "Phrased by ..." label.
+
+Settings: `ADVISOR_UNDERSTANDING=model|keywords` (default `model`, which only
+takes effect when the chat provider is reachable), `ADVISOR_UNDERSTANDING_TIMEOUT_SECONDS`
+(default 45), and `OLLAMA_UNDERSTANDING_MODEL` to route with a smaller model than
+the one that rephrases. `use_llm: false` in a chat request skips it.
+
+**Live, 2026-11-04, `qwen2.5:7b` on Ollama (laptop CPU).** Routing alone, eight
+questions: 2.7-5.9 s each once the model was loaded (18.8 s for the first, cold).
+
+| Question (with history where shown) | Keywords | Model |
+|---|---|---|
+| after a credits answer: "It says I have earned 138 credits. So I don't think I need anymore. Right?" | remaining_requirements | `credits` on the first run (now overridden, see above); `remaining_requirements` after the prompt fix |
+| after "Can I take COSC 354?": "Why does this course not count yet?" | explain_requirement | explain_requirement, codes [COSC354] from history |
+| after "What does COSC 220 unlock?": "and what about COSC 241?" | course_info | unlocks, [COSC241] |
+| "Can you lay out the rest of my degree term by term?" | plan_semesters | plan_semesters |
+| "Should I do COSC 241 or COSC 243 first?" | compare | compare |
+| "If I bomb COSC 220 this semester what happens?" | course_info | what_if, [COSC220] |
+| "am I on track or what" | progress | progress |
+| "Who is the best professor for COSC 241?" | course_info | unknown -> keywords kept |
+
+Full `ask()` (routing + rephrasing), six questions: 54-126 s each. Routes were
+right every time (five by the model; the stress question by keywords, by design).
+One rephrasing shipped (the "bomb COSC 220" what-if, faithful); five were
+discarded by the consistency check - dropped catalog warning (3), a dropped "3
+credits" figure, and COSC 241 given COSC 243's title in the semester plan - and
+the engine's text was shown with the reason.
+
+## Engine answers added for the demo (Nov 2026)
+
+All built from engine output; a model may only rephrase them under the same check.
+
+| Question | Intent | Engine source |
+|---|---|---|
+| "So I don't need any more, right?" | `remaining_requirements` | opens with an engine-decided "No, not yet" |
+| "Can you help me plan my remaining semesters?" / "When can I graduate?" | `plan_semesters` | `audit/schedule.generate_schedule` (no graduation date given) |
+| "Which is better for me, COSC 241 or COSC 243?" | `compare` | `audit/compare.compare_courses` (ranks nothing) |
+| "Why does COSC 220 not count?" / "why is my supporting courses block not satisfied?" | `explain_requirement` | `audit/explain_audit.explain_all` |
+| "What happens if I fail COSC 220?" | `what_if` | `audit/impact.explore_unlocks` - what stays blocked |
+| "I'm overwhelmed and worried I won't graduate on time" | `wellbeing` | facts: credits, open blocks, eligible courses |
+
+`answer_credits` no longer says "you still need 0" or "115% of the way" once the
+credit total is met: it says the total is exceeded and lists the requirement
+blocks still outstanding.
+
+**Wellbeing.** Routed only on words the student wrote ("overwhelmed", "stressed",
+or "worried"/"scared" together with graduating, failing or falling behind) -
+nothing infers a mood. The reply acknowledges what they said, gives their real
+standing, suggests their academic advisor and the campus counseling center, and
+promises no graduation date. It names no office, phone number or URL, because none
+has been verified for this project. Self-harm wording ("kill myself", "end my
+life", ...) gets a fixed reply that points to 911 and 988 (the US Suicide &
+Crisis Lifeline, call or text); that reply is never routed or rephrased by a model.
+
 ## Providers
 
 | Provider | Needs | How it talks |
@@ -115,6 +203,38 @@ the point of having one. **No new dependency was added for any of this.**
 probes the server for Ollama, because "is Ollama running" has no answer in
 configuration. When the configured model is not pulled, the reason names the
 models that *are*.
+
+**Gemini is blocked on credentials.** No `GEMINI_API_KEY` exists, so it has never
+been called. Loopback tests (`test_chat_providers.py`, `test_ai_providers.py`)
+pin the request shape (`systemInstruction`, `contents` with the `model` role,
+`generationConfig`, `responseMimeType` for routing), response parsing, every
+failure mode, and that the key travels only in the `x-goog-api-key` header, never
+the URL.
+
+### Reading transcript images locally (vision)
+
+`VISION_PROVIDER=ollama` makes scanned or photographed transcripts readable with
+no key: `OllamaVisionProvider` (`app/llm/provider.py`) sends the image and the
+existing transcription prompt to Ollama with `format: "json"`.
+
+```bash
+ollama pull qwen2.5vl:3b        # ~3.2 GB
+VISION_PROVIDER=ollama OLLAMA_VISION_MODEL=qwen2.5vl:3b uvicorn app.main:app
+```
+
+* Images only (PNG/JPG/...). PDFs still go to the deterministic PDF reader; a
+  scanned PDF is not offered to the local model.
+* Every row is `unverified_extraction`, at most MEDIUM confidence, and must be
+  confirmed by the student on the review screen. Nothing is stored by an upload.
+* If the model fails or times out (`OLLAMA_VISION_TIMEOUT_SECONDS`, default 600),
+  the upload returns 503 with a generic message; text transcripts keep working.
+* **Live, 2026-11-04:** `data/samples/demo_transcript.png` (the 7 courses of
+  `demo_transcript.txt`, rendered as an image and marked as an unofficial demo for
+  a fictional student) through `POST /ingest/transcript` with `qwen2.5vl:3b`:
+  **7 of 7 rows correct** (code, term, grade, credits), 105 s on the laptop CPU.
+  One clean, typed image is not evidence about phone photos or real scans.
+* **Off by default** because of that latency; turn it on for a demo where a
+  two-minute wait is acceptable.
 
 ## Every way this degrades
 

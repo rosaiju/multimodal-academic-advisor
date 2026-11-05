@@ -1,0 +1,55 @@
+MORGAN STATE UNIVERSITY
+SYNTHETIC SAMPLE TRANSCRIPT - FICTIONAL STUDENT, NOT A REAL RECORD
+
+Student: Jordan Sample (fictional)
+Program: Computer Science, B.S.
+
+Fall 2023
+COSC 111  Introduction to Computer Science I    4.00  A
+ENGL 101  Composition I                         3.00  A
+MATH 241  Calculus I                            4.00  B
+UNIV 101  University First-Year Seminar         1.00  A
+PHIL 109  Critical Thinking                     3.00  B
+Term GPA: 3.53   Cumulative GPA: 3.53
+
+Spring 2024
+COSC 112  Introduction to Computer Science II   4.00  B
+ENGL 102  Composition II                        3.00  A
+MATH 242  Calculus II                           4.00  C
+COSC 201  Computer Ethics                       1.00  A
+HLTH 200  Discovering Public Health             3.00  A
+Term GPA: 3.20   Cumulative GPA: 3.37
+
+Fall 2024
+COSC 220  Data Structures and Algorithms        4.00  C
+COSC 281  Discrete Structure                    3.00  F
+COSC 243  Computer Organization and Architecture 3.00  B
+MATH 312  Linear Algebra I                      3.00  B
+HIST 350  Introduction to the African Diaspora  3.00  A
+Term GPA: 2.44   Cumulative GPA: 3.04
+
+Spring 2025
+COSC 281  Discrete Structure                    3.00  B
+COSC 241  Computer Systems and Digital Logic    3.00  B
+COSC 238  Object Oriented Programming           4.00  A
+MATH 331  Applied Probability and Statistics    3.00  C
+COMM 300  Communication and the Black Diaspora  3.00  B
+Term GPA: 3.00   Cumulative GPA: 3.03
+
+Fall 2025
+COSC 352  Organization of Programming Languages 3.00  B
+COSC 349  Computer Networks                     3.00  A
+COSC 351  Cybersecurity                         3.00  B
+COSC 251  Introduction to Data Science          3.00  A
+MATH 313  Linear Algebra II                     3.00  C
+Term GPA: 3.20   Cumulative GPA: 3.06
+
+Spring 2026
+COSC 354  Operating Systems                     3.00  A
+COSC 458  Software Engineering                  3.00  B
+COSC 470  Artificial Intelligence               3.00  B
+HLTH 203  Personal and Community Health         3.00  A
+Term GPA: 3.50   Cumulative GPA: 3.14
+
+Fall 2026
+COSC 459  Database Design                       3.00  IP

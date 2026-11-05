@@ -283,3 +283,40 @@ def test_chat_route_reports_read_in_full(client, uploaded) -> None:  # noqa: F81
     client.post("/advisor/chat", json={**body, "message": "what do I still need to graduate"})
     out = client.post("/advisor/chat", json={**body, "message": LIST_ALL}).json()
     assert out["read_in_full"] is True
+
+
+def test_list_all_still_answers_previous_question_with_model_routing(facts) -> None:  # noqa: F811
+    """Merging PR #16 with model routing: the router must route the question being
+    answered ("asked" = the previous one), or "list them all" would be re-routed from
+    its own words and the follow-up would stop working."""
+
+    class Router:
+        provider_id = "stub"
+        name = "router"
+
+        def __init__(self):
+            self.sent: list[str] = []
+
+        def available(self):
+            return (True, "ok")
+
+        def complete_json(self, *, system, messages, max_tokens=800):
+            self.sent.append(messages[-1].content)
+            return '{"intent": "remaining_requirements", "course_codes": [], "follow_up_of": null}'
+
+    ask(facts, REMAINING, student_id="f9", conversation_id="live", live=True, use_llm=False)
+    router = Router()
+    reply = ask(
+        facts,
+        LIST_ALL,
+        student_id="f9",
+        conversation_id="live",
+        live=True,
+        provider=StubProvider(reply="summary"),
+        understanding_provider=router,
+    )
+    assert router.sent and REMAINING in router.sent[-1]
+    assert reply.intent is Intent.REMAINING_REQUIREMENTS
+    assert reply.answer == deterministic_answer(facts, REMAINING).text
+    assert reply.read_in_full
+    assert reply.understood_by == "model"

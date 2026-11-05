@@ -168,6 +168,18 @@ def build_facts(
     )
 
 
+def every_option_required(block: dict) -> bool:
+    """True when a block's listed options are not a choice: it needs all of them.
+
+    Seen live: the engine wrote "2 course(s) still needed ... Options: COSC459,
+    COSC490" and a model rephrased it as "either COSC459 or COSC490". With no
+    more options than courses still needed, every option is required.
+    """
+    needed = block.get("courses_still_needed") or 0
+    options = block.get("options") or []
+    return bool(options) and not block.get("satisfied") and len(options) <= needed
+
+
 def render_facts(facts: AdvisorFacts) -> str:
     """The student's record as plain text, for a chat model's system prompt.
 
@@ -225,7 +237,8 @@ def render_facts(facts: AdvisorFacts) -> str:
             )
         lines.append(head)
         if block["options"] and not block["satisfied"]:
-            lines.append(f"      options: {', '.join(block['options'])}")
+            label = "all required" if every_option_required(block) else "options"
+            lines.append(f"      {label}: {', '.join(block['options'])}")
 
     lines += ["", "RECOMMENDED NEXT COURSES (eligible now, engine-derived):"]
     if facts.recommended:

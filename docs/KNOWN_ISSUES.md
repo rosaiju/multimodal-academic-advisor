@@ -17,3 +17,6 @@
 | 13 | Integration branch is local only | Teammates cannot see it until pushed | Push `integration/nov5-demo` and open a PR when approved |
 | 14 | Live voice (PR #16): hands-free and barge-in not tested with a human voice; echo may re-trigger the mic on speakers | Could interrupt itself mid-answer | Use headphones; test once before class |
 | 15 | Live voice relaxes the consistency check (`brief=True`): spoken summaries may omit codes and figures, still never invent or distort | Reviewer sign-off needed | Team review on PR #16 |
+| 16 | Gemini is chat-only: `gemini_vision_model` exists in settings but no Gemini vision provider (vision = anthropic/openai/ollama) | Image reading cannot use Gemini | Add a Gemini vision provider when a key exists |
+| 17 | Default Gemini model `gemini-2.0-flash` never called live | May be retired by Google; unknown until a key is used | Run the live smoke test with a key, update the model name if needed |
+| 18 | `catalog.doctor --strict` exits 1 (34 courses in no requirement block) | Same on `main`; CI does not run it | Resolves as electives/tracks get encoded |

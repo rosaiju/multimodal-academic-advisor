@@ -1,4 +1,4 @@
-# Final implementation report — November 4, 2026
+# Final implementation report — November 4–5, 2026
 
 Branch `integration/nov5-demo` (local, **not pushed, not merged to main**), based on
 `main` at `5249737`. Built by a lead plus four agents, each in its own git worktree and
@@ -80,3 +80,29 @@ walkthrough (`backend/scripts/browser_walkthrough.py`); advanced fictional trans
 | Reference tech (Vertex/Gemini) | Gemini provider exists; **blocked on credentials** |
 
 Not 100% complete: see `docs/KNOWN_ISSUES.md`.
+
+## Update, November 5 — combined branch `integration/nov5-demo-voice`
+
+Contains everything above plus `origin/main` as of `a380327`, i.e. Emmanuel's PR #16
+(live voice advisor) including the two commits he added before merging it.
+
+| Check (run 2026-11-05) | Result |
+|---|---|
+| Backend tests | **1330 passed** |
+| Frontend tests | **55 passed** (10 files) |
+| ruff / black / oxlint / build | clean |
+| Catalog doctor | pass; `--strict` fails on the known "34 courses in no block" warning, same on `main`, not run by CI |
+| Browser walkthrough, 12 steps | **all pass, twice in a row** (after the planner fix below) |
+| Text-to-speech (Deepgram Aura) | real MP3, ~1.8 s |
+| Live voice turns via API | read-back, confident answer, "list them all", summer, out-of-scope links all correct |
+| Gemini | code present (chat only), 17 mocked tests pass; live **blocked: no key**; without one, health says "GEMINI_API_KEY is not set" and the app falls back |
+
+Lead fixes during this integration:
+- Routing prompt crashed on PR #16's new `graduate_early` intent → every question fell
+  back to keywords. Fixed + test (`d2159ce`).
+- PR #16's "list them all" answered from the previous question, but model routing then
+  re-routed from "list them all" itself. Routing now uses the question being answered.
+  Test + verified live (`8e590de`).
+- Semester planner race (Sameer's component): a slower plan or an older check could
+  overwrite the screen, showing "1 problem" with nothing red. Seen in the walkthrough,
+  reproduced by two failing Vitest tests, fixed (`b1dd21e`).

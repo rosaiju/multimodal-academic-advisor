@@ -78,7 +78,7 @@ export default function CourseCompare({ studentId, programId }) {
           {picked.map((code) => (
             <span
               key={code}
-              className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 text-sm text-white"
+              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-b from-brand-600 to-brand-700 px-3 py-1 text-sm font-semibold text-white shadow-sm"
             >
               {code}
               <button
@@ -147,9 +147,10 @@ export default function CourseCompare({ studentId, programId }) {
                 <section
                   key={c.code}
                   aria-label={c.code}
-                  className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm"
+                  className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 text-sm shadow-[var(--shadow-card)]"
                 >
-                  <h3 className="font-semibold text-slate-900">
+                  <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 to-accent-400" />
+                  <h3 className="text-base font-bold text-brand-950">
                     {c.code} <span className="font-normal text-slate-500">{c.credits} cr</span>
                   </h3>
                   <p className="text-slate-600">{c.title}</p>
@@ -216,7 +217,7 @@ export default function CourseCompare({ studentId, programId }) {
 function Row({ label, children }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
+      <dt className="mt-1 text-[0.7rem] font-semibold uppercase tracking-wider text-brand-500">{label}</dt>
       <dd className="text-slate-700">{children}</dd>
     </div>
   )

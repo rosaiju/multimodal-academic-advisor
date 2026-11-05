@@ -102,7 +102,7 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
 
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">Credit progress</h2>
+              <h2 className="text-xl font-extrabold text-brand-950">Credit progress</h2>
               <EngineBadge />
             </div>
             <p className="text-sm text-slate-500">
@@ -115,10 +115,25 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
                 ['In progress', `${summary.credits_in_progress} cr`],
                 ['Applied to encoded requirements', `${summary.credits_applied} cr`],
                 ['Not in our catalog', `${summary.credits_outside_catalog} cr`],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
-                  <div className="text-lg font-semibold tabular-nums text-slate-900">{value}</div>
-                  <div className="text-xs text-slate-500">{label}</div>
+              ].map(([label, value], i) => (
+                <div
+                  key={label}
+                  className={`relative overflow-hidden rounded-xl px-3.5 py-3 ring-1 ring-inset ${
+                    i === 0
+                      ? 'bg-gradient-to-br from-brand-50 to-white ring-brand-200'
+                      : 'bg-gradient-to-br from-slate-50 to-white ring-slate-200'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`absolute inset-x-0 top-0 h-0.5 ${
+                      i === 0 ? 'bg-gradient-to-r from-brand-500 to-accent-400' : 'bg-slate-200'
+                    }`}
+                  />
+                  <div className="font-display text-xl font-bold tabular-nums text-brand-950">
+                    {value}
+                  </div>
+                  <div className="mt-0.5 text-xs font-medium text-slate-500">{label}</div>
                 </div>
               ))}
             </div>
@@ -197,22 +212,35 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
           {plan.recommended.length === 0 ? (
             <EmptyState>Nothing to recommend yet — confirm some coursework first.</EmptyState>
           ) : (
-            <ul className="space-y-3">
-              {plan.recommended.map((rec) => (
+            <ul className="grid gap-3 lg:grid-cols-2">
+              {plan.recommended.map((rec, rank) => (
                 <li
                   key={rec.course.code}
-                  className="rounded-lg border border-slate-200 p-4 transition hover:border-slate-300"
+                  className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[var(--shadow-lift)]"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-900">{rec.course.code}</span>
-                        <span className="text-slate-400">·</span>
-                        <span className="text-slate-700">{rec.course.title}</span>
+                    <div className="flex min-w-0 gap-3">
+                      <span
+                        aria-hidden="true"
+                        className={`grid size-8 shrink-0 place-items-center rounded-lg font-display text-sm font-bold ${
+                          rank === 0
+                            ? 'bg-gradient-to-br from-accent-300 to-accent-500 text-brand-950'
+                            : 'bg-brand-50 text-brand-700'
+                        }`}
+                      >
+                        {rank + 1}
+                      </span>
+                      <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-brand-900 px-1.5 py-0.5 font-mono text-xs font-semibold tracking-wide text-white">
+                          {rec.course.code}
+                        </span>
+                        <span className="font-semibold text-slate-800">{rec.course.title}</span>
                       </div>
                       <div className="mt-0.5 text-xs text-slate-500">
                         {rec.course.credits} credits
                         {rec.unlocks_count > 0 && ` · unlocks ${rec.unlocks_count} later course(s)`}
+                      </div>
                       </div>
                     </div>
                     <ProvenanceBadge value={rec.provenance} />
@@ -222,7 +250,7 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
                   <ul className="mt-3 space-y-1">
                     {rec.reasons.map((reason, i) => (
                       <li key={i} className="flex gap-2 text-sm text-slate-600">
-                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-slate-400" />
+                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand-400" />
                         {reason}
                       </li>
                     ))}
@@ -246,7 +274,10 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
           ) : (
             <ul className="space-y-3">
               {plan.gaps.map((gap) => (
-                <li key={gap.block_id} className="rounded-lg bg-slate-50 px-4 py-3">
+                <li
+                  key={gap.block_id}
+                  className="rounded-xl border border-slate-200 border-l-4 border-l-brand-400 bg-white px-4 py-3"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <span className="font-medium text-slate-900">{gap.name}</span>
                     <StatusBadge value={gap.status} />
@@ -290,7 +321,10 @@ export default function Dashboard({ studentId, onAddMore, onReset, onAskAdvisor 
           ) : (
             <ul className="space-y-3">
               {plan.blocked.map((entry) => (
-                <li key={entry.course.code} className="rounded-lg bg-slate-50 px-4 py-3">
+                <li
+                  key={entry.course.code}
+                  className="rounded-xl border border-slate-200 border-l-4 border-l-rose-400 bg-white px-4 py-3"
+                >
                   <div className="font-medium text-slate-900">
                     {entry.course.code} · {entry.course.title}
                   </div>

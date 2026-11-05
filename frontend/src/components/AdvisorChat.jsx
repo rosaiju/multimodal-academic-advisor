@@ -191,13 +191,16 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
 
         <div
           ref={scroller}
-          className="max-h-[28rem] space-y-4 overflow-y-auto"
+          className="max-h-[34rem] space-y-5 overflow-y-auto pr-1"
           aria-live="polite"
           aria-busy={waiting}
         >
           {messages.length === 0 && !waiting && (
-            <div className="py-6 text-center">
-              <p className="text-sm font-medium text-slate-700">What would you like to know?</p>
+            <div className="py-8 text-center">
+              <AdvisorAvatar className="mx-auto size-12" />
+              <p className="mt-3 font-display text-lg font-bold text-brand-950">
+                What would you like to know?
+              </p>
               {suggestions.length > 0 && (
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {suggestions.map((question) => (
@@ -206,7 +209,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
                       type="button"
                       onClick={() => send(question)}
                       disabled={busy || voiceBusy}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                      className="rounded-full border border-brand-100 bg-brand-50/60 px-3.5 py-1.5 text-xs font-medium text-brand-800 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white hover:shadow-sm disabled:opacity-50"
                     >
                       {question}
                     </button>
@@ -243,7 +246,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
 
           {waiting && (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3">
+              <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/80">
                 <Spinner label="Checking your record…" />
               </div>
             </div>
@@ -259,8 +262,10 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
         )}
 
         <form
-          className={`mt-4 flex items-center gap-1.5 rounded-2xl border bg-white py-1.5 pl-4 pr-1.5 transition ${
-            liveOn ? 'border-slate-900' : 'border-slate-300 focus-within:border-slate-900'
+          className={`mt-5 flex items-center gap-1.5 rounded-2xl border bg-white py-1.5 pl-4 pr-1.5 shadow-sm transition ${
+            liveOn
+              ? 'border-brand-500 ring-4 ring-brand-100'
+              : 'border-slate-300 focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-100'
           }`}
           onSubmit={(event) => {
             event.preventDefault()
@@ -300,7 +305,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
               className={
                 voice.listening
                   ? 'animate-pulse bg-rose-600 text-white hover:bg-rose-700'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  : 'text-slate-500 hover:bg-brand-50 hover:text-brand-700'
               }
             >
               <MicIcon />
@@ -311,7 +316,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
             <IconButton
               label="End voice conversation"
               onClick={live.end}
-              className="bg-slate-900 text-white hover:bg-slate-800"
+              className="bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm hover:from-brand-500 hover:to-brand-600"
             >
               <CloseIcon />
             </IconButton>
@@ -320,7 +325,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
               type="submit"
               label="Ask"
               disabled={busy || voiceBusy || !draft.trim()}
-              className="bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+              className="bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm hover:from-brand-500 hover:to-brand-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
             >
               <ArrowUpIcon />
             </IconButton>
@@ -329,7 +334,7 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
               label="Start voice conversation"
               disabled={busy}
               onClick={startLive}
-              className="bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+              className="bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm hover:from-brand-500 hover:to-brand-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:shadow-none"
             >
               <WaveformIcon />
             </IconButton>
@@ -393,13 +398,32 @@ export default function AdvisorChat({ hasRecord, onGoToUpload }) {
   )
 }
 
+/** The advisor's avatar: the product mark, small. Decorative. */
+function AdvisorAvatar({ className = '' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-700 to-brand-950 text-accent-300 shadow-sm ${
+        className.includes('hidden') ? '' : 'grid'
+      } ${className}`}
+    >
+      <svg viewBox="0 0 24 24" className="size-1/2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 9.5 12 5l10 4.5L12 14 2 9.5Z" />
+        <path d="M6 11.6V16c0 1.2 2.7 2.8 6 2.8s6-1.6 6-2.8v-4.4" />
+      </svg>
+    </span>
+  )
+}
+
 /** A student turn. `draft` is the words still being heard in a voice conversation. */
 function UserBubble({ text, draft = false }) {
   return (
     <div className="flex justify-end">
       <p
         className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm px-4 py-2.5 text-sm ${
-          draft ? 'bg-slate-200 text-slate-600' : 'bg-slate-900 text-white'
+          draft
+            ? 'bg-brand-100 text-brand-800'
+            : 'bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-sm shadow-brand-900/20'
         }`}
       >
         {text}
@@ -527,16 +551,17 @@ export function AdvisorTurn({ reply, onSpeak, speaking = false, pending = false,
     // Waiting for the voice to start: the words appear as they are spoken.
     return (
       <div className="flex justify-start">
-        <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3">
+        <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/80">
           <Spinner label="Getting ready to speak…" />
         </div>
       </div>
     )
   }
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[92%] space-y-2">
-        <div className="rounded-2xl rounded-bl-sm bg-slate-100 px-4 py-3">
+    <div className="flex justify-start gap-2.5">
+      <AdvisorAvatar className="mt-1 hidden size-8 sm:grid" />
+      <div className="min-w-0 max-w-[92%] space-y-2">
+        <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200/80">
           <div className="text-sm leading-relaxed text-slate-800">
             <StreamedText text={reply.answer} ms={revealMs} />
           </div>
@@ -639,7 +664,7 @@ function LiveStatus({ state }) {
         {[0, 1, 2, 3, 4].map((bar) => (
           <span
             key={bar}
-            className={`w-1 rounded-full ${state === 'listening' ? 'bg-rose-500' : 'bg-slate-900'} ${
+            className={`w-1 rounded-full ${state === 'listening' ? 'bg-rose-500' : 'bg-brand-600'} ${
               moving ? 'animate-pulse' : 'opacity-40'
             }`}
             style={{ height: `${[8, 14, 20, 14, 8][bar]}px`, animationDelay: `${bar * 120}ms` }}

@@ -237,14 +237,18 @@ export default function SemesterPlanner({ studentId }) {
                     if (dragging) move(dragging, t.term)
                     setDragging(null)
                   }}
-                  className={`rounded-xl border bg-white p-3 shadow-sm ${
-                    dragging ? 'border-dashed border-slate-400' : 'border-slate-200'
+                  className={`rounded-2xl border bg-white p-3.5 shadow-[var(--shadow-card)] transition ${
+                    dragging ? 'border-dashed border-brand-400 bg-brand-50/40' : 'border-slate-200'
                   }`}
                 >
-                  <header className="mb-2 flex items-baseline justify-between">
-                    <h3 className="text-sm font-semibold text-slate-900">{t.term}</h3>
+                  <header className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <h3 className="text-sm font-bold text-brand-950">{t.term}</h3>
                     <span
-                      className={`text-xs ${total > creditTarget ? 'font-medium text-amber-700' : 'text-slate-500'}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        total > creditTarget
+                          ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/30'
+                          : 'bg-brand-50 text-brand-700'
+                      }`}
                     >
                       {total} credits
                     </span>
@@ -266,13 +270,15 @@ export default function SemesterPlanner({ studentId }) {
                           draggable
                           onDragStart={() => setDragging(c.code)}
                           onDragEnd={() => setDragging(null)}
-                          className={`cursor-grab rounded-lg border p-2 text-sm ${
-                            bad ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'
+                          className={`cursor-grab rounded-xl border p-2.5 text-sm transition hover:shadow-sm active:cursor-grabbing ${
+                            bad
+                              ? 'border-red-300 bg-red-50'
+                              : 'border-slate-200 border-l-4 border-l-brand-400 bg-white hover:border-brand-200'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <span className="font-medium text-slate-900">{c.code}</span>
+                              <span className="font-medium text-brand-950">{c.code}</span>
                               <span className="ml-1 text-xs text-slate-500">{c.credits} cr</span>
                               <p className="text-xs text-slate-600">{c.title}</p>
                             </div>
@@ -357,9 +363,10 @@ export default function SemesterPlanner({ studentId }) {
 
 function Stat({ label, value, note }) {
   return (
-    <div className="rounded-lg bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="text-lg font-semibold text-slate-900">{value}</div>
+    <div className="relative overflow-hidden rounded-xl bg-white px-4 py-3 shadow-[var(--shadow-card)] ring-1 ring-slate-200">
+      <span aria-hidden="true" className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand-500 to-accent-400" />
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="font-display text-xl font-bold text-brand-950">{value}</div>
       {note && <div className="text-xs text-slate-400">{note}</div>}
     </div>
   )

@@ -77,7 +77,11 @@ A deterministic answer to the student's question has already been prepared:
 Rephrase the prepared answer in a natural, friendly advising voice. Keep every
 fact, number and course code exactly as given, each with the same meaning - a
 percentage of progress stays a percentage of progress. You may reorder and reword. You
-may not add academic claims that are not in the facts block."""
+may not add academic claims that are not in the facts block.
+
+Format the answer in Markdown for a chat window: short paragraphs, a "-" bullet
+list when naming several courses or requirements, and **bold** for the main
+takeaway. No headings, tables or code blocks."""
 
 #: Live voice: the same facts and prepared answer, but the model SUMMARIZES for
 #: speech. Checked with check_rephrasing(brief=True): it may leave details out,

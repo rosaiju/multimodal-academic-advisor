@@ -33,7 +33,7 @@ export function useSpeaker() {
   }, [])
 
   const speak = useCallback(
-    async (text, links = [], { brief = false } = {}) => {
+    async (text, links = [], { brief = false, onStart } = {}) => {
       stop()
       const mine = generation.current
       setError(null)
@@ -55,7 +55,9 @@ export function useSpeaker() {
         current.current = { audio, url, resolve }
         audio.onended = stop
         audio.onerror = stop
-        Promise.resolve(audio.play()).catch(stop)
+        Promise.resolve(audio.play())
+          .then(() => onStart?.(audio.duration))
+          .catch(stop)
       })
     },
     [stop],

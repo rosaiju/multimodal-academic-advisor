@@ -8,6 +8,11 @@ const YES = /^\s*(yes|yeah|yep|yup|correct|right|exactly|uh huh)\b/i
 /** Real words, not a cough or a stray "a": the bar for interrupting the advisor. */
 const REAL_WORDS = /\w{2,}/
 
+/** How long a reply takes to type itself out on screen when not tied to audio. */
+export function typingMs(text) {
+  return Math.min((text ?? '').split(/\s+/).length * 30, 3000)
+}
+
 /**
  * A spoken conversation with the advisor.
  *
@@ -22,9 +27,16 @@ const REAL_WORDS = /\w{2,}/
  * Answers come from the same advisor as typed chat; nothing here writes text a
  * student hears except the backend's checked answer.
  */
-export function useVoiceConversation({ conversationId = 'live', handsFree = true } = {}) {
+export function useVoiceConversation({
+  conversationId = 'live',
+  handsFree = true,
+  setTurns: externalSetTurns,
+} = {}) {
   const [state, setStateRaw] = useState('idle')
-  const [turns, setTurns] = useState([])
+  const [turns, setOwnTurns] = useState([])
+  //: The chat panel passes its own setter so voice turns land in the same thread.
+  const setTurns = externalSetTurns ?? setOwnTurns
+  const idRef = useRef(0)
   const stateRef = useRef('idle')
   const activeRef = useRef(false)
   const turnRef = useRef(0) // bumps on every new turn, barge-in and end: stale work checks it
@@ -80,7 +92,12 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
       }
       if (turn !== turnRef.current || !activeRef.current) return
 
-      setTurns((all) => [...all, { role: 'advisor', reply }])
+      // The text appears as the advisor speaks: hidden until audio starts, then
+      // revealed over the audio's length (a model summary is exactly what is said).
+      const id = `voice-${++idRef.current}`
+      const patch = (fields) =>
+        setTurns((all) => all.map((t) => (t.id === id ? { ...t, ...fields } : t)))
+      setTurns((all) => [...all, { role: 'advisor', id, reply, pending: true }])
       if (reply.clarification) pendingRef.current = { question, clarification: reply.clarification }
 
       setState('speaking')
@@ -89,7 +106,16 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
       // for speech by the backend's deterministic brief pass. The screen shows it all.
       await speakerRef.current.speak(reply.answer, reply.links ?? [], {
         brief: reply.source !== 'engine+llm',
+        onStart: (seconds) =>
+          patch({
+            pending: false,
+            revealMs:
+              reply.source === 'engine+llm' && Number.isFinite(seconds) ? seconds * 1000
+                : typingMs(reply.answer),
+          }),
       })
+      // Ended, interrupted or failed: the whole answer is on screen either way.
+      patch({ pending: false, revealMs: 0 })
       if (turn !== turnRef.current || !activeRef.current) return // interrupted or ended
 
       if (handsFreeRef.current) listen()
@@ -98,15 +124,19 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
         setState('idle')
       }
     },
-    [conversationId, listen, setState],
+    [conversationId, listen, setState, setTurns],
   )
 
   const onDone = useCallback(
     ({ text, confidence }) => {
       if (!activeRef.current) return
-      // Heard during playback but not enough to interrupt (a cough, "a", echo):
-      // not a question. The post-playback listen() starts a fresh session.
-      if (stateRef.current === 'speaking' && !REAL_WORDS.test(text ?? '')) return
+      // Heard during playback but not enough to interrupt (a cough, "a", echo, or
+      // nothing - the server ends a silent session after 8 s): not a question. Open
+      // a new session at once, or the rest of a long reply can't be interrupted.
+      if (stateRef.current === 'speaking' && !REAL_WORDS.test(text ?? '')) {
+        if (handsFreeRef.current) liveRef.current?.start()
+        return
+      }
       if (text?.trim()) {
         handleUtterance(text.trim(), confidence)
         return

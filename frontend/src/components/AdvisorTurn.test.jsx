@@ -29,3 +29,44 @@ describe('AdvisorTurn', () => {
     expect(onSpeak).toHaveBeenCalled()
   })
 })
+
+describe('AdvisorTurn streaming', () => {
+  it('waits for the voice before showing the answer', () => {
+    render(<AdvisorTurn reply={reply} pending />)
+    expect(screen.queryByText('I cannot answer that.')).toBeNull()
+    expect(screen.getByText('Getting ready to speak…')).toBeInTheDocument()
+  })
+
+  it('types the answer out over revealMs, then shows all of it', async () => {
+    render(<AdvisorTurn reply={reply} revealMs={200} />)
+    expect(screen.queryByText('I cannot answer that.')).toBeNull()
+    expect(await screen.findByText('I cannot answer that.')).toBeInTheDocument()
+  })
+})
+
+describe('AdvisorTurn markdown', () => {
+  it('renders bold and lists instead of showing the symbols', () => {
+    const md = { ...reply, links: [], answer: '**You need 105 credits.**\n\n- COSC 220\n- MATH 241' }
+    const { container } = render(<AdvisorTurn reply={md} />)
+    expect(container.querySelector('strong')).toHaveTextContent('You need 105 credits.')
+    expect(container.querySelectorAll('li')).toHaveLength(2)
+    expect(container.textContent).not.toContain('**')
+  })
+
+  it('keeps engine line breaks and ends a list before a following line', () => {
+    const engine = {
+      ...reply,
+      links: [],
+      answer: 'Eligible now:\n- COSC220 (4 cr)\n  Warning: offered irregularly\nNot yet eligible: COSC354.',
+    }
+    const { container } = render(<AdvisorTurn reply={engine} />)
+    expect(container.querySelector('li br')).not.toBeNull()
+    expect(container.querySelector('li')).not.toHaveTextContent('Not yet eligible')
+  })
+
+  it('never renders raw HTML from an answer', () => {
+    const html = { ...reply, links: [], answer: 'Hi <img src=x onerror="alert(1)"> there' }
+    const { container } = render(<AdvisorTurn reply={html} />)
+    expect(container.querySelector('img')).toBeNull()
+  })
+})

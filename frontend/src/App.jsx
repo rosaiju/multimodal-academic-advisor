@@ -119,29 +119,42 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-3">
-          <div>
-            <h1 className="font-semibold tracking-tight">Academic Advisor</h1>
-            <p className="text-xs text-slate-500">
-              Morgan State University · Computer Science · COSC 490
-            </p>
-          </div>
-          {user && (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="max-w-40 truncate text-slate-600" title={user.email}>
-                {user.name || user.email}
-              </span>
-              <button
-                type="button"
-                onClick={signOut}
-                className="font-medium text-slate-900 underline underline-offset-2"
-              >
-                Sign out
-              </button>
+    <div className="min-h-screen text-slate-900">
+      <header className="z-30 sm:sticky sm:top-0">
+        <div className="bg-gradient-to-r from-brand-950 via-brand-900 to-brand-800 text-white shadow-lg shadow-brand-950/20">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+            <div className="flex items-center gap-3">
+              <BrandMark />
+              <div>
+                <h1 className="text-[1.05rem] font-extrabold leading-tight tracking-tight">
+                  Academic Advisor
+                </h1>
+                <p className="text-xs text-brand-200">
+                  Morgan State University · Computer Science · COSC 490
+                </p>
+              </div>
             </div>
-          )}
+            {user && (
+              <div className="flex items-center gap-3 text-xs">
+                <span
+                  aria-hidden="true"
+                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-accent-300 to-accent-500 font-bold text-brand-950 ring-2 ring-white/20"
+                >
+                  {initials(user.name || user.email)}
+                </span>
+                <span className="max-w-40 truncate text-brand-100" title={user.email}>
+                  {user.name || user.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="rounded-lg px-2.5 py-1.5 font-semibold text-white ring-1 ring-inset ring-white/25 transition hover:bg-white/10"
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/*
@@ -150,9 +163,10 @@ export default function App() {
           row scrolls sideways inside itself at 375px; the page never does.
         */}
         {user && (
+          <div className="border-b border-slate-200/80 bg-white/85 backdrop-blur-md">
           <nav
             aria-label="Main"
-            className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-6 pb-2 text-sm [scrollbar-width:thin]"
+            className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2 text-sm [scrollbar-width:thin] sm:px-6"
           >
             <NavGroup label="Add coursework">
               {SETUP_STEPS.map((s, i) => (
@@ -166,7 +180,7 @@ export default function App() {
                 />
               ))}
             </NavGroup>
-            <span aria-hidden="true" className="mx-2 h-5 w-px shrink-0 bg-slate-200" />
+            <span aria-hidden="true" className="mx-2 h-5 w-px shrink-0 bg-slate-300/70" />
             <NavGroup label="Your degree">
               {TOOLS.map((s) => (
                 <NavItem
@@ -180,10 +194,11 @@ export default function App() {
               ))}
             </NavGroup>
           </nav>
+          </div>
         )}
       </header>
 
-      <main className="px-4 py-6 sm:px-6 sm:py-8">
+      <main className="px-4 py-6 sm:px-6 sm:py-10">
         {booting && (
           <div className="flex justify-center py-16">
             <Spinner label="Connecting to the advising engine…" />
@@ -286,6 +301,28 @@ function NavGroup({ label, children }) {
   )
 }
 
+/** Initials for the account chip: "Walkthrough Student" -> "WS", an email -> "W". */
+function initials(name) {
+  const words = String(name).split('@')[0].split(/[\s._-]+/).filter(Boolean)
+  return (words.slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase()
+}
+
+/** The product mark: an open book under a mortarboard, drawn inline (no image request). */
+function BrandMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent-300 to-accent-500 shadow-md shadow-black/20"
+    >
+      <svg viewBox="0 0 24 24" className="size-6 text-brand-950" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 9.5 12 5l10 4.5L12 14 2 9.5Z" />
+        <path d="M6 11.6V16c0 1.2 2.7 2.8 6 2.8s6-1.6 6-2.8v-4.4" />
+        <path d="M22 9.5v5" />
+      </svg>
+    </span>
+  )
+}
+
 function NavItem({ label, active, enabled, hint, onClick }) {
   return (
     <button
@@ -294,11 +331,11 @@ function NavItem({ label, active, enabled, hint, onClick }) {
       disabled={!enabled}
       title={enabled ? undefined : hint}
       aria-current={active ? 'page' : undefined}
-      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition ${
+      className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
         active
-          ? 'bg-slate-900 text-white'
+          ? 'bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm shadow-brand-900/25'
           : enabled
-            ? 'text-slate-600 hover:bg-slate-100'
+            ? 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             : 'cursor-not-allowed text-slate-300'
       }`}
     >

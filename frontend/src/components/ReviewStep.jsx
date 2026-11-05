@@ -166,7 +166,7 @@ export default function ReviewStep({ extraction, programId, onConfirmed, onBack 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wider text-brand-600">
                   <th className="w-10 py-2"></th>
                   <th className="py-2 pr-3">Course</th>
                   <th className="py-2 pr-3">Term</th>
@@ -285,7 +285,7 @@ export default function ReviewStep({ extraction, programId, onConfirmed, onBack 
         </Alert>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
+      <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-white px-5 py-4 shadow-[var(--shadow-lift)]">
         <div className="text-sm text-slate-600">
           <span className="font-semibold text-slate-900">{selected.size}</span> of {rows.length}{' '}
           selected. Only what you confirm counts toward your degree.

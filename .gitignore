@@ -37,3 +37,6 @@ backend/uploads/
 # Personal speech-benchmark recordings and reports
 backend/benchmarks/recordings/
 backend/benchmarks/reports/
+
+# start-demo.ps1 logs and the PIDs of the servers it started
+.demo/

@@ -124,7 +124,7 @@ export default function Deadlines({ studentId }) {
                       <h3 className="font-semibold text-slate-900">
                         {d.title}
                         {d.is_yours && (
-                          <span className="ml-2 rounded bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white">
+                          <span className="ml-2 rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">
                             Your group
                           </span>
                         )}

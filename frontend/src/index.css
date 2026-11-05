@@ -1,7 +1,70 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. One brand hue (deep indigo-navy) for structure and primary
+ * actions, one warm accent (gold) for highlights, slate for text. Status colours
+ * (emerald / amber / rose / sky / violet) keep their meaning everywhere: they
+ * carry provenance and eligibility, so they are never used as decoration.
+ */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #5b63e6;
+  --color-brand-600: #4447c9;
+  --color-brand-700: #3536a3;
+  --color-brand-800: #26286f;
+  --color-brand-900: #1a1c4d;
+  --color-brand-950: #10112f;
+
+  --color-accent-300: #fcd779;
+  --color-accent-400: #f8c14a;
+  --color-accent-500: #eba721;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.08);
+  --shadow-lift: 0 2px 4px rgb(15 23 42 / 0.05), 0 12px 32px -8px rgb(26 28 77 / 0.18);
 }
 
-html { -webkit-font-smoothing: antialiased; }
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgb(199 210 254 / 0.45), transparent 60%),
+    radial-gradient(900px 420px at 100% 0%, rgb(252 215 121 / 0.18), transparent 60%),
+    #f6f7fb;
+  background-repeat: no-repeat;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+/* One visible focus style for every control, keyboard users first. */
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; }
+}
+
+/* Slim, on-brand scrollbar for inner scroll areas such as the chat history. */
+.nice-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-brand-200) transparent;
+}
+.nice-scroll::-webkit-scrollbar { width: 6px; }
+.nice-scroll::-webkit-scrollbar-track { background: transparent; }
+.nice-scroll::-webkit-scrollbar-thumb { background: var(--color-brand-200); border-radius: 9999px; }
+.nice-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-brand-400); }

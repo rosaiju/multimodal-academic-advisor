@@ -10,18 +10,20 @@
 export function Card({ title, subtitle, action, children, className = '' }) {
   return (
     <section
-      className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}
+      className={`rounded-2xl border border-slate-200/80 bg-white shadow-[var(--shadow-card)] ${className}`}
     >
       {(title || action) && (
-        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-5 py-4">
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-5 py-4 sm:px-6">
           <div>
-            {title && <h2 className="font-semibold text-slate-900">{title}</h2>}
+            {title && (
+              <h2 className="text-[1.05rem] font-bold tracking-tight text-slate-900">{title}</h2>
+            )}
             {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
           </div>
           {action}
         </header>
       )}
-      <div className="px-5 py-4">{children}</div>
+      <div className="px-5 py-4 sm:px-6 sm:py-5">{children}</div>
     </section>
   )
 }
@@ -52,7 +54,7 @@ export function ProvenanceBadge({ value }) {
   }
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${meta.className}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${meta.className}`}
     >
       {meta.label}
     </span>
@@ -69,7 +71,7 @@ export function ConfidenceBadge({ value }) {
   const meta = CONFIDENCE[value] ?? CONFIDENCE.low
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${meta.className}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${meta.className}`}
     >
       {meta.label}
     </span>
@@ -100,14 +102,14 @@ export function StatusBadge({ value }) {
 export function Button({ variant = 'primary', className = '', ...props }) {
   const styles = {
     primary:
-      'bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500',
+      'bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm shadow-brand-900/20 hover:from-brand-500 hover:to-brand-600 disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none',
     secondary:
-      'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:text-slate-400',
-    ghost: 'text-slate-600 hover:bg-slate-100 disabled:text-slate-400',
+      'bg-white text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 hover:ring-slate-400 disabled:text-slate-400',
+    ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:text-slate-400',
   }
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${styles[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100 ${styles[variant]} ${className}`}
       {...props}
     />
   )
@@ -115,12 +117,12 @@ export function Button({ variant = 'primary', className = '', ...props }) {
 
 export function Alert({ tone = 'info', title, children }) {
   const tones = {
-    info: 'border-sky-200 bg-sky-50 text-sky-900',
-    warning: 'border-amber-200 bg-amber-50 text-amber-900',
-    error: 'border-rose-200 bg-rose-50 text-rose-900',
+    info: 'border-sky-200 border-l-sky-500 bg-sky-50/90 text-sky-950',
+    warning: 'border-amber-200 border-l-amber-500 bg-amber-50/90 text-amber-950',
+    error: 'border-rose-200 border-l-rose-500 bg-rose-50/90 text-rose-950',
   }
   return (
-    <div className={`rounded-lg border px-4 py-3 text-sm ${tones[tone]}`}>
+    <div className={`rounded-xl border border-l-4 px-4 py-3 text-sm leading-relaxed ${tones[tone]}`}>
       {title && <p className="font-semibold">{title}</p>}
       <div className={title ? 'mt-1' : ''}>{children}</div>
     </div>
@@ -139,8 +141,8 @@ export function Alert({ tone = 'info', title, children }) {
  * `percent` may exceed 100: the arc caps, the printed figure does not, because
  * rounding 115% down to 100% is the same lie in smaller type.
  */
-export function ProgressRing({ percent, caption, detail, size = 132 }) {
-  const stroke = 11
+export function ProgressRing({ percent, caption, detail, size = 148 }) {
+  const stroke = 12
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const clamped = Math.max(0, Math.min(100, percent))
@@ -149,12 +151,18 @@ export function ProgressRing({ percent, caption, detail, size = 132 }) {
     <figure className="m-0 flex w-full max-w-60 flex-col items-center gap-2 sm:w-auto">
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
+          <defs>
+            <linearGradient id="ring-gradient" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="var(--color-brand-500)" />
+              <stop offset="100%" stopColor="var(--color-accent-400)" />
+            </linearGradient>
+          </defs>
           <circle
             cx={size / 2}
             cy={size / 2}
             r={radius}
             strokeWidth={stroke}
-            className="fill-none stroke-slate-200"
+            className="fill-none stroke-brand-100"
           />
           <circle
             cx={size / 2}
@@ -164,11 +172,12 @@ export function ProgressRing({ percent, caption, detail, size = 132 }) {
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={circumference * (1 - clamped / 100)}
-            className="fill-none stroke-slate-900 transition-[stroke-dashoffset] duration-700"
+            stroke="url(#ring-gradient)"
+            className="fill-none transition-[stroke-dashoffset] duration-1000 ease-out"
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
-          <span className="text-2xl font-semibold tabular-nums text-slate-900">
+          <span className="font-display text-3xl font-extrabold tabular-nums text-brand-900">
             {shown.toFixed(0)}%
           </span>
           {/* Inside the ring there is room for two short words at phone width. */}
@@ -188,7 +197,7 @@ export function ProgressRing({ percent, caption, detail, size = 132 }) {
 export function Spinner({ label = 'Loading…' }) {
   return (
     <div className="flex items-center gap-3 text-sm text-slate-500">
-      <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+      <span className="size-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />
       {label}
     </div>
   )

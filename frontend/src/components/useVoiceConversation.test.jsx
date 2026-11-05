@@ -61,7 +61,7 @@ describe('useVoiceConversation', () => {
       expect.objectContaining({ message: 'what do I have left', mode: 'live', confidence: 0.95 }),
     )
     expect(result.current.state).toBe('speaking')
-    expect(speaker.speak).toHaveBeenCalledWith('You have 7 courses left.', [], { brief: true })
+    expect(speaker.speak).toHaveBeenCalledWith('You have 7 courses left.', [], expect.objectContaining({ brief: true }))
     await endSpeech()
     expect(result.current.state).toBe('idle')
     expect(result.current.turns.map((t) => t.role)).toEqual(['user', 'advisor'])
@@ -72,7 +72,19 @@ describe('useVoiceConversation', () => {
     const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
     act(() => result.current.start())
     await say('what do I have left')
-    expect(speaker.speak).toHaveBeenCalledWith('You have 7 left.', [], { brief: false })
+    expect(speaker.speak).toHaveBeenCalledWith('You have 7 left.', [], expect.objectContaining({ brief: false }))
+  })
+
+  it('"list them all" is read in full, not cut down', async () => {
+    askAdvisor.mockResolvedValue(reply('All 5 blocks...', { read_in_full: true }))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: false }))
+    act(() => result.current.start())
+    await say('could you list out the full list')
+    expect(speaker.speak).toHaveBeenCalledWith(
+      'All 5 blocks...',
+      [],
+      expect.objectContaining({ brief: false }),
+    )
   })
 
   it('hands-free returns to listening after speaking', async () => {
@@ -173,6 +185,23 @@ describe('useVoiceConversation', () => {
     await say('a', 0.3)
     expect(askAdvisor).toHaveBeenCalledTimes(1)
     expect(result.current.state).toBe('speaking')
+  })
+
+  it('keeps listening for barge-in when a session ends empty mid-playback', async () => {
+    // The server ends a session that hears nothing for 8 s; long replies outlast it.
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result, rerender } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    const before = live.start.mock.calls.length
+    await say('', 0)
+    expect(live.start).toHaveBeenCalledTimes(before + 1)
+    await say('a', 0.3) // a stray sound ending a session also re-opens one
+    expect(live.start).toHaveBeenCalledTimes(before + 2)
+    live.liveText = 'wait'
+    await act(async () => rerender())
+    expect(speaker.stop).toHaveBeenCalled()
+    expect(result.current.state).toBe('listening')
   })
 
   it('the question after a barge-in tells the server the reply was interrupted', async () => {

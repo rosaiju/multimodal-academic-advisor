@@ -16,7 +16,32 @@ _CODE = re.compile(r"\b([A-Z]{3,4})\s?(\d)(\d{2})\b")
 _MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 _URL = re.compile(r"(?:https?://|www\.)\S+?(?=[.,;:!?)]*(?:\s|$))")
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
-_MARKDOWN = re.compile(r"[*_`#>]+")
+_MARKDOWN = re.compile(r"[*_`#>~|]+")
+_FENCE = re.compile(r"^\s*(```|~~~)")
+_RULE = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
+_TABLE_SEPARATOR = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$")
+_HEADING = re.compile(r"^\s*#{1,6}\s+(.*?)\s*#*\s*$")
+_ESCAPE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|~>])")
+
+
+def _unmark(text: str) -> str:
+    """Markdown structure as plain sentences: code fences and rules dropped,
+    a heading ends with a full stop, a table row is read as "a, b, c."
+    Inline marks (** _ ~~ `) are removed later, with the other symbols."""
+    lines: list[str] = []
+    for line in _ESCAPE.sub(r"\1", text).splitlines():
+        if _FENCE.match(line) or _RULE.match(line) or _TABLE_SEPARATOR.match(line):
+            continue
+        heading = _HEADING.match(line)
+        if heading:
+            line = heading[1]
+            if line and line[-1] not in ".!?:;":
+                line += "."
+        elif line.strip().startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            line = ", ".join(c for c in cells if c) + "."
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _join(items: list[str]) -> str:
@@ -86,6 +111,7 @@ def _brief(text: str) -> str:
 def to_speech(text: str, links: Sequence[Link] = (), *, brief: bool = False) -> str:
     if brief:
         text = _brief(text)
+    text = _unmark(text)
     text = _MD_LINK.sub(lambda m: m[1], text)  # [name](url) -> name
     for link in links:
         text = text.replace(link.url, link.name)

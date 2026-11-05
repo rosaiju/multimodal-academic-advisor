@@ -65,4 +65,21 @@ describe('useSpeaker', () => {
     expect(result.current.error).toMatch(/aloud/i)
     expect(result.current.speaking).toBe(false)
   })
+
+  it('stop() during the fetch means the answer never plays', async () => {
+    let deliver
+    speakText.mockReturnValue(new Promise((r) => (deliver = r)))
+    const { result } = renderHook(() => useSpeaker())
+    let done
+    act(() => {
+      done = result.current.speak('Hello')
+    })
+    act(() => result.current.stop())
+    await act(async () => {
+      deliver(new Blob(['mp3']))
+      await done
+    })
+    expect(audios).toHaveLength(0)
+    expect(result.current.speaking).toBe(false)
+  })
 })

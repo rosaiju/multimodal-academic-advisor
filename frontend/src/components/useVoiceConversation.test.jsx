@@ -20,6 +20,7 @@ beforeEach(() => {
   live = { supported: true, listening: false, liveText: '', error: null, start: vi.fn(), stop: vi.fn() }
   useLiveTranscription.mockImplementation((opts) => {
     live.onDone = opts.onDone
+    live.onFail = opts.onFail
     return live
   })
   speaker = {
@@ -146,5 +147,23 @@ describe('useVoiceConversation', () => {
     expect(speaker.speak).not.toHaveBeenCalled()
     expect(result.current.turns.map((t) => t.role)).toEqual(['user'])
     expect(result.current.state).toBe('idle')
+  })
+
+  it('a listening session that fails goes idle instead of hanging', async () => {
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await act(async () => live.onFail('Voice input is not available'))
+    expect(result.current.state).toBe('idle')
+    expect(live.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('a stray sound heard during playback is not asked as a question', async () => {
+    askAdvisor.mockResolvedValue(reply('A long answer...'))
+    const { result } = renderHook(() => useVoiceConversation({ handsFree: true }))
+    act(() => result.current.start())
+    await say('what do I have left')
+    await say('a', 0.3)
+    expect(askAdvisor).toHaveBeenCalledTimes(1)
+    expect(result.current.state).toBe('speaking')
   })
 })

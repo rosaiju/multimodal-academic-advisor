@@ -13,7 +13,8 @@ from collections.abc import Sequence
 from app.advisor.links import Link
 
 _CODE = re.compile(r"\b([A-Z]{3,4})\s?(\d)(\d{2})\b")
-_URL = re.compile(r"https?://\S+")
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_URL = re.compile(r"(?:https?://|www\.)\S+?(?=[.,;:!?)]*(?:\s|$))")
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 _MARKDOWN = re.compile(r"[*_`#>]+")
 
@@ -25,6 +26,7 @@ def _join(items: list[str]) -> str:
 
 
 def to_speech(text: str, links: Sequence[Link] = ()) -> str:
+    text = _MD_LINK.sub(lambda m: m[1], text)  # [name](url) -> name
     for link in links:
         text = text.replace(link.url, link.name)
     text = _URL.sub("", text)

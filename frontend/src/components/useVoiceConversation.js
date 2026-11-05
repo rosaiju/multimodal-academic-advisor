@@ -91,6 +91,9 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
   const onDone = useCallback(
     ({ text, confidence }) => {
       if (!activeRef.current) return
+      // Heard during playback but not enough to interrupt (a cough, "a", echo):
+      // not a question. The post-playback listen() starts a fresh session.
+      if (stateRef.current === 'speaking' && !REAL_WORDS.test(text ?? '')) return
       if (text?.trim()) {
         handleUtterance(text.trim(), confidence)
         return
@@ -107,7 +110,16 @@ export function useVoiceConversation({ conversationId = 'live', handsFree = true
     [handleUtterance, listen, setState],
   )
 
-  const live = useLiveTranscription({ onDone })
+  // The mic or socket failed: stop rather than show "Listening…" forever.
+  const onFail = useCallback(() => {
+    if (!activeRef.current) return
+    activeRef.current = false
+    turnRef.current++
+    speakerRef.current.stop()
+    setState('idle')
+  }, [setState])
+
+  const live = useLiveTranscription({ onDone, onFail })
   useEffect(() => {
     liveRef.current = live
   })

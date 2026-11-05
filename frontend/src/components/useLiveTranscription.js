@@ -23,7 +23,7 @@ const CHUNK_MS = 250
  * - Tracks are released on every ending, including unmount, so the browser's
  *   recording indicator always goes away.
  */
-export function useLiveTranscription({ onDone }) {
+export function useLiveTranscription({ onDone, onFail }) {
   const supported =
     typeof window !== 'undefined' &&
     typeof window.MediaRecorder !== 'undefined' &&
@@ -40,10 +40,12 @@ export function useLiveTranscription({ onDone }) {
   const startingRef = useRef(false)
   const mountedRef = useRef(true)
   const onDoneRef = useRef(onDone)
+  const onFailRef = useRef(onFail)
 
   useEffect(() => {
     onDoneRef.current = onDone
-  }, [onDone])
+    onFailRef.current = onFail
+  }, [onDone, onFail])
 
   const release = useCallback(() => {
     const recorder = recorderRef.current
@@ -81,6 +83,8 @@ export function useLiveTranscription({ onDone }) {
       if (message) setError(message)
       if (result) onDoneRef.current?.(result)
       else if (heard) onDoneRef.current?.({ text: heard, confidence: 0 })
+      // Ended by a failure with nothing heard: tell a caller that loops (live mode).
+      else if (message) onFailRef.current?.(message)
     },
     [release],
   )
@@ -115,6 +119,7 @@ export function useLiveTranscription({ onDone }) {
     } catch {
       startingRef.current = false
       setError(MIC_BLOCKED)
+      onFailRef.current?.(MIC_BLOCKED)
       return
     }
     startingRef.current = false

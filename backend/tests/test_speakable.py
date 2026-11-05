@@ -39,3 +39,13 @@ def test_stray_url_removed() -> None:
 def test_idempotent() -> None:
     once = to_speech("You need:\n- COSC 241\n- MATH 141\n\nCheck **this**.", [REG])
     assert to_speech(once) == once
+
+
+def test_markdown_link_keeps_only_its_text() -> None:
+    out = to_speech("Ask [the Registrar](https://www.morgan.edu/registrar) today.")
+    assert out == "Ask the Registrar today."
+
+
+def test_url_keeps_trailing_punctuation_and_www_removed() -> None:
+    assert to_speech("See https://example.com/x. Then go.") == "See. Then go."
+    assert "www" not in to_speech("Visit www.morgan.edu for more.")

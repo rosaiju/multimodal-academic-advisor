@@ -13,11 +13,17 @@ export function useSpeaker() {
   const [error, setError] = useState(null)
   const current = useRef(null) // { audio, url, resolve }
   const mounted = useRef(true)
+  //: Bumped by stop(): a speak() whose fetch was still running must not play.
+  const generation = useRef(0)
 
   const stop = useCallback(() => {
+    generation.current++
     const playing = current.current
     current.current = null
-    if (!playing) return
+    if (!playing) {
+      if (mounted.current) setSpeaking(false)
+      return
+    }
     playing.audio.onended = null
     playing.audio.onerror = null
     playing.audio.pause()
@@ -29,6 +35,7 @@ export function useSpeaker() {
   const speak = useCallback(
     async (text, links = []) => {
       stop()
+      const mine = generation.current
       setError(null)
       setSpeaking(true)
       let blob
@@ -41,7 +48,7 @@ export function useSpeaker() {
         }
         return
       }
-      if (!mounted.current) return
+      if (!mounted.current || mine !== generation.current) return
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       await new Promise((resolve) => {
